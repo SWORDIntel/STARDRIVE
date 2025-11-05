@@ -16,6 +16,8 @@ Developing a driver for a proprietary protocol like DisplayLink is a complex and
 ## Current Status
 This project is currently in the early development and reverse-engineering phase. The core Rust project structure is set up, and initial integration with `libusb` (for USB communication) and `libevdi` (for virtual display management) has been established.
 
+**Static analysis of Windows driver files has been completed.** This has provided valuable insights into the device's USB configuration and the different functionalities (display and network) handled by separate interfaces.
+
 **Important Note:** Development is currently blocked by the need for a persistent Linux environment with properly installed kernel headers. The current environment (LiveCD) does not support kernel module compilation or persistent driver installation.
 
 ## High-Level Plan
@@ -28,12 +30,16 @@ This project is currently in the early development and reverse-engineering phase
     *   `libevdi` compiled from source.
     *   Rust bindings for `libevdi` generated.
     *   Integration confirmed via `cargo build`.
-3.  **USB Protocol Reverse Engineering:** (Pending)
+3.  **Windows Driver Analysis:** (Completed)
+    *   Extracted strings from `dlidusb*.dll` files.
+    *   Analyzed `dlidusb.inf`: Identified a comprehensive list of supported DisplayLink devices (VID `0x17e9`) and confirmed `PID_0x4307` for the StarTech USB35DOCK. The `MI_00` suffix likely indicates the display interface.
+    *   Analyzed `dlcdcncm.inf`: Identified this as the network adapter driver, also supporting `VID_0x17e9` and `PID_0x4307` with an `MI_05` suffix, indicating the network interface.
+4.  **USB Protocol Reverse Engineering:** (Pending - requires persistent Linux environment)
     *   **Goal:** Intercept `DisplayLinkManager`'s `libusb` calls to understand the proprietary protocol for device initialization, mode setting, and framebuffer data transfer (including compression/encryption).
     *   **Method:** This will involve running the official `DisplayLinkManager` binary in a controlled environment and using tools like `strace` or a custom `LD_PRELOAD` library to log all USB control and bulk transfers. This step requires a functional `evdi` kernel module and a running `DisplayLinkManager` in a persistent Linux environment.
-4.  **Rust USB Communication Implementation:**
-    *   Replicate device initialization and framebuffer transfer using `rusb` based on reverse-engineered protocol.
-5.  **Refinement & Features:**
+5.  **Implement Rust Driver:**
+    *   Replicate device initialization and framebuffer transfer using `rusb` and `libevdi` bindings based on reverse-engineered protocol.
+6.  **Refinement & Features:**
     *   Implement hot-plugging, resolution changes, cursor updates, and performance optimizations.
 
 ## Development Environment Setup
