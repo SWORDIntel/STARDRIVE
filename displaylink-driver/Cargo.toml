@@ -1,0 +1,11 @@
+[package]
+name = "displaylink-driver"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rusb = "0.9"
+
+[build-dependencies]
+bindgen = "0.69"
+cc = "1.0"
