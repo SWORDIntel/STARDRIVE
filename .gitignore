@@ -1,7 +1,46 @@
+# Rust
+target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
 
-Displaylink Corporate Installer.zip
-[DisplayLink] Windows USB Display Adapter.zip
-[displaylink] mac usb display adapter.zip
-Displaylink Corporate Installer/EXE Installer/Setup_12.1.exe
-[DisplayLink] Windows USB Display Adapter/Win 10, 11/DisplayLink USB Graphics Software for Windows12.1-EXE.exe
-[DisplayLink] Windows USB Display Adapter/Windows 7, 8, 8.1/DisplayLink USB Graphics Software for Windows10.3 M0-EXE.exe
+# Build artifacts
+*.o
+*.so
+*.ko
+*.a
+*.la
+*.mod.c
+*.mod
+.tmp_versions/
+Module.symvers
+modules.order
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+
+# Compiled binaries
+displaylink-driver/target/
+evdi_source/**/*.o
+evdi_source/**/*.so
+evdi_source/**/*.ko
+
+# Distribution packages
+*.deb
+*.rpm
+*.zip
+*.tar.gz
+*.pkg
+
+# Testing
+.pytest_cache/
+__pycache__/
+*.pyc
