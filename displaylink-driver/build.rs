@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 fn main() {
     // Tell cargo to look for shared libraries in the specified path
-    println!("cargo:rustc-link-search=/home/user/Documents/STARTICKEDOFF/evdi_source/library");
+    println!("cargo:rustc-link-search=/home/user/STARDRIVE/evdi_source/library");
     // Tell cargo to link the `evdi` library
     println!("cargo:rustc-link-lib=evdi");
 
@@ -15,7 +15,7 @@ fn main() {
     // the resulting bindings.
     let bindings = bindgen::Builder::default()
         // The input header we would like to generate bindings for.
-        .header("/home/user/Documents/STARTICKEDOFF/evdi_source/library/evdi_lib.h")
+        .header("/home/user/STARDRIVE/evdi_source/library/evdi_lib.h")
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
