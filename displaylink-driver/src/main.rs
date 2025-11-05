@@ -4,12 +4,16 @@
 #![allow(non_snake_case)]
 #![allow(dead_code)]
 
+mod displaylink_protocol;
+
 use rusb::{Device, DeviceDescriptor, DeviceHandle, UsbContext};
 use std::ptr;
 use std::ffi::c_void;
 use std::time::Duration;
 use std::sync::{Arc, Mutex};
 use std::thread;
+
+use displaylink_protocol::*;
 
 // Include auto-generated EVDI bindings
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
@@ -48,6 +52,8 @@ struct DisplayLinkDriver {
     usb_handle: Arc<Mutex<DeviceHandle<rusb::Context>>>,
     current_mode: Option<evdi_mode>,
     buffers: Vec<FrameBuffer>,
+    compressor: RLECompressor,
+    cmd_builder: CommandBuilder,
 }
 
 struct FrameBuffer {
@@ -65,85 +71,131 @@ impl DisplayLinkDriver {
             usb_handle: Arc::new(Mutex::new(usb_handle)),
             current_mode: None,
             buffers: Vec::new(),
+            compressor: RLECompressor::new(),
+            cmd_builder: CommandBuilder::new(),
         }
     }
 
     // Initialize the DisplayLink device via USB
     fn initialize_device(&mut self) -> Result<(), String> {
-        let handle = self.usb_handle.lock().unwrap();
+        {
+            let handle = self.usb_handle.lock().unwrap();
 
-        // Detach kernel driver if active (Linux only)
-        match handle.kernel_driver_active(DISPLAY_INTERFACE) {
-            Ok(true) => {
-                println!("Detaching kernel driver from interface {}", DISPLAY_INTERFACE);
-                handle.detach_kernel_driver(DISPLAY_INTERFACE)
-                    .map_err(|e| format!("Failed to detach kernel driver: {}", e))?;
+            // Detach kernel driver if active (Linux only)
+            match handle.kernel_driver_active(DISPLAY_INTERFACE) {
+                Ok(true) => {
+                    println!("Detaching kernel driver from interface {}", DISPLAY_INTERFACE);
+                    handle.detach_kernel_driver(DISPLAY_INTERFACE)
+                        .map_err(|e| format!("Failed to detach kernel driver: {}", e))?;
+                }
+                Ok(false) => println!("No kernel driver attached"),
+                Err(e) => println!("Cannot check kernel driver status: {}", e),
             }
-            Ok(false) => println!("No kernel driver attached"),
-            Err(e) => println!("Cannot check kernel driver status: {}", e),
-        }
 
-        // Claim the display interface
-        println!("Claiming interface {}", DISPLAY_INTERFACE);
-        handle.claim_interface(DISPLAY_INTERFACE)
-            .map_err(|e| format!("Failed to claim interface: {}", e))?;
+            // Claim the display interface
+            println!("Claiming interface {}", DISPLAY_INTERFACE);
+            handle.claim_interface(DISPLAY_INTERFACE)
+                .map_err(|e| format!("Failed to claim interface: {}", e))?;
+        }  // Drop handle lock here
 
         // Send initialization sequence to DisplayLink device
-        // NOTE: This is a placeholder - actual protocol needs to be reverse-engineered
         self.send_init_sequence()?;
 
         Ok(())
     }
 
     // Send initialization commands to DisplayLink device
-    fn send_init_sequence(&self) -> Result<(), String> {
-        let _handle = self.usb_handle.lock().unwrap();
+    fn send_init_sequence(&mut self) -> Result<(), String> {
+        let handle = self.usb_handle.lock().unwrap();
 
-        println!("Sending initialization sequence to DisplayLink device...");
+        println!("Initializing DisplayLink device...");
 
-        // NOTE: The actual DisplayLink USB protocol is proprietary and undocumented
-        // These are placeholder commands that would need to be reverse-engineered
-        // from the official DisplayLinkManager binary using USB packet capture
+        // Initialize DisplayLink channel
+        let request_type = USB_DIR_OUT | USB_TYPE_VENDOR | USB_RECIP_DEVICE;
+        handle.write_control(
+            request_type,
+            DL_USB_REQUEST_CHANNEL,
+            DL_CHAN_CMD_INIT,
+            0,
+            &[],
+            CONTROL_TIMEOUT,
+        ).map_err(|e| format!("Channel init failed: {}", e))?;
 
-        // Example control transfer structure (needs actual values):
-        // - Request type: USB_TYPE_VENDOR | USB_RECIP_DEVICE
-        // - Request: <unknown>
-        // - Value: <unknown>
-        // - Index: <unknown>
-        // - Data: <device-specific initialization data>
+        println!("  ✓ Channel initialized");
 
-        // Placeholder for device initialization
-        // In a real implementation, this would contain:
-        // 1. Device capability query
-        // 2. Compression format negotiation
-        // 3. Display configuration setup
-        // 4. EDID exchange
+        // Blank the screen initially
+        let blank_cmd = self.cmd_builder.blank_screen(true).to_vec();
+        drop(handle);  // Release lock before send_bulk_data
+        self.send_bulk_data(&blank_cmd)?;
 
-        println!("WARNING: DisplayLink USB protocol is proprietary and not implemented");
-        println!("To complete this driver, reverse-engineer the protocol using:");
-        println!("  1. USB packet capture (usbmon, Wireshark)");
-        println!("  2. strace of DisplayLinkManager");
-        println!("  3. Binary analysis of libdlm.so");
+        println!("  ✓ Screen blanked");
 
         Ok(())
     }
 
     // Send framebuffer data to DisplayLink device
-    fn send_framebuffer(&self, buffer: &FrameBuffer) -> Result<(), String> {
-        let _handle = self.usb_handle.lock().unwrap();
+    fn send_framebuffer(&mut self, buffer: &FrameBuffer) -> Result<(), String> {
+        println!("Compressing framebuffer: {}x{}", buffer.width, buffer.height);
 
-        println!("Sending framebuffer update: {}x{}", buffer.width, buffer.height);
+        // Compress framebuffer using RLE
+        let compressed = self.compressor.compress(
+            &buffer.data,
+            buffer.width as usize,
+            buffer.height as usize,
+        ).to_vec();
 
-        // NOTE: Actual implementation would:
-        // 1. Compress the framebuffer data (DisplayLink uses proprietary compression)
-        // 2. Split into USB bulk transfer packets
-        // 3. Send via bulk OUT endpoint
-        // 4. Handle acknowledgments via bulk IN endpoint
+        println!("  Compressed {} bytes -> {} bytes",
+            buffer.data.len(), compressed.len());
 
-        // Placeholder for bulk transfer
-        // let timeout = Duration::from_secs(1);
-        // handle.write_bulk(BULK_OUT_ENDPOINT, &compressed_data, timeout)
-        //     .map_err(|e| format!("Bulk transfer failed: {}", e))?;
+        // Set damage rectangle (full screen update)
+        let damage_cmd = self.cmd_builder.damage_rect(
+            0, 0,
+            buffer.width as u16,
+            buffer.height as u16,
+        ).to_vec();
+        self.send_bulk_data(&damage_cmd)?;
+
+        // Send compressed framebuffer data in chunks
+        self.send_bulk_data(&compressed)?;
+
+        // Sync/flush command
+        let sync_cmd = self.cmd_builder.sync().to_vec();
+        self.send_bulk_data(&sync_cmd)?;
+
+        println!("  ✓ Framebuffer sent");
+
+        Ok(())
+    }
+
+    // Send mode set command to DisplayLink device
+    fn send_mode_set(&mut self, mode: &DisplayMode) -> Result<(), String> {
+        println!("Setting display mode: {}x{}@{}Hz",
+            mode.width, mode.height, mode.refresh_rate);
+
+        let mode_cmd = self.cmd_builder.set_mode(mode).to_vec();
+        self.send_bulk_data(&mode_cmd)?;
+
+        // Unblank the screen after mode set
+        let unblank_cmd = self.cmd_builder.blank_screen(false).to_vec();
+        self.send_bulk_data(&unblank_cmd)?;
+
+        println!("  ✓ Mode set complete");
+
+        Ok(())
+    }
+
+    // Send data via USB bulk transfer
+    fn send_bulk_data(&self, data: &[u8]) -> Result<(), String> {
+        let handle = self.usb_handle.lock().unwrap();
+
+        // Split into chunks if necessary
+        for chunk in data.chunks(DL_MAX_TRANSFER_SIZE) {
+            handle.write_bulk(
+                BULK_OUT_ENDPOINT,
+                chunk,
+                BULK_TIMEOUT,
+            ).map_err(|e| format!("Bulk transfer failed: {}", e))?;
+        }
 
         Ok(())
     }
@@ -195,6 +247,25 @@ impl DisplayLinkDriver {
                 mode.width, mode.height, mode.refresh_rate);
             driver.current_mode = Some(mode);
 
+            // Create DisplayLink mode configuration
+            let dl_mode = DisplayMode {
+                width: mode.width as u32,
+                height: mode.height as u32,
+                refresh_rate: mode.refresh_rate as u32,
+                pixel_clock: 148500,  // Will be calculated based on mode
+                hsync_start: mode.width as u32 + 88,
+                hsync_end: mode.width as u32 + 88 + 44,
+                htotal: mode.width as u32 + 280,
+                vsync_start: mode.height as u32 + 4,
+                vsync_end: mode.height as u32 + 4 + 5,
+                vtotal: mode.height as u32 + 45,
+            };
+
+            // Send mode to DisplayLink device
+            if let Err(e) = driver.send_mode_set(&dl_mode) {
+                eprintln!("Failed to set DisplayLink mode: {}", e);
+            }
+
             // Register new buffer for new mode
             if let Err(e) = driver.register_buffer(mode.width, mode.height) {
                 eprintln!("Failed to register buffer: {}", e);
@@ -209,8 +280,18 @@ impl DisplayLinkDriver {
             evdi_grab_pixels(driver.evdi_handle, ptr::null_mut(), ptr::null_mut());
 
             // Send framebuffer to DisplayLink device
-            if let Some(buffer) = driver.buffers.iter().find(|b| b.id == buffer_id) {
-                if let Err(e) = driver.send_framebuffer(buffer) {
+            // Find buffer and clone necessary data to avoid borrow issues
+            if let Some(buffer_index) = driver.buffers.iter().position(|b| b.id == buffer_id) {
+                // Create a temporary buffer reference
+                let buffer = &driver.buffers[buffer_index];
+                let buffer_copy = FrameBuffer {
+                    id: buffer.id,
+                    data: buffer.data.clone(),
+                    width: buffer.width,
+                    height: buffer.height,
+                    stride: buffer.stride,
+                };
+                if let Err(e) = driver.send_framebuffer(&buffer_copy) {
                     eprintln!("Failed to send framebuffer: {}", e);
                 }
             }
