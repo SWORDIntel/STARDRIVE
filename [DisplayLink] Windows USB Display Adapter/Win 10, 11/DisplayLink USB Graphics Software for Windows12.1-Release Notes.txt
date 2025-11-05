@@ -1,0 +1,179 @@
+=============================================================================
+=============================================================================
+DisplayLink Software Release: External Release Note
+Software Package: DisplayLink Graphics
+Software Package Version: 12.1.2482.0
+Software Package Date: 12th September 2025
+
+Windows 10 v1709 onwards and Windows 11:
+ - DisplayLink Graphics Driver Version: 12.1.2424.0
+ - DisplayLink Graphics Driver Date: 09/09/2025
+ - DisplayLink Audio Driver Extension Version: 12.1.2305.0
+ - DisplayLink Ethernet Driver Version: 12.1.2305.0
+=============================================================================
+=============================================================================
+
+A. Introduction
+===============
+This is the R12.1M0 product release, the first release of 12.1 driver. 													 
+It has been put through our full system tests and is suitable for deployment to end-users. 
+
+DisplayLink software release 12.1 delivers:
+- New features:
+    - Modern Standby support for DL-6xxx series.
+- General stability updates and bug fixes
+
+This release is for Windows 10 and 11 only. 
+Older releases are available from Synaptics website:
+https://synaptics.com/products/displaylink-graphics/downloads/windows
+
+The DL-3000, DL-4000 (where applicable) and DL-5000 series plus the
+associated software, is expected to meet the following compliances at the time
+of release:
+
+- USB 2.0 protocol
+- DisplayPort (source 1.2)
+- DisplayPort ++
+- HDCP 1.x over DP
+- HDCP 1.x over HDMI
+- HDCP 1.x over DVI
+- HDMI (source 1.4)
+
+The DL-6000 series plus the associated software, is expected to meet the following
+compliances at the time of release:
+
+- USB 2.0 protocol
+- USB 3.2 protocol
+- DisplayPort (source 1.4)
+- DisplayPort ++
+- HDCP 1.x over DP
+- HDCP 1.x over HDMI
+- HDMI (source 1.4, 2.0)
+
+The DL-7000 series plus the associated software, is expected to meet the following
+compliances at the time of release:
+
+- USB 2.0 protocol
+- USB 3.2 protocol
+- DisplayPort (source 1.4)
+- DisplayPort ++
+- HDCP 1.x over DP
+- HDCP 1.x over HDMI
+- HDMI (source 1.4, 2.0)
+
+For further support and information about DisplayLink software, please visit
+https://support.displaylink.com/knowledgebase
+
+A1. Important Notes about DL-1000/DL-3000/DL-4100/DL-5000/DL-6000/DL-7000 Firmware
+======================================================
+This software release contains an embedded firmware image.
+DL-1000/DL-3000/DL-4100/DL-5000/DL-6000/DL-7000 devices will be automatically updated
+with this firmware upon connection.
+
+B. Contents
+===========
+A. Introduction
+A1. Important Notes about DL-1000/DL-3000/DL-4100/DL-5000/DL-6000/DL-7000 Firmware
+B. Contents
+C. New Features
+C1. Issues Fixed since 12.0 M0 release (12.0.273.0)
+D. How to Install and Use
+E. Supported Operating Systems
+F. PC Recommended Specifications
+G. Language Support
+H. Supported Hardware
+I. Known Issues and Limitations
+
+C. New Features
+===============
+DisplayLink software release 12.1 delivers:
+- New features:
+    - Modern Standby support for DL-6xxx series.
+- General stability updates and bug fixes.
+
+C1. Issues Fixed Since 12.0 M0 Release (12.0.273.0)
+Issues Fixed in 12.1 M0 Release (12.1.2424.0)
+----------------------------------------------------
+- General stability updates and bug fixes.
+
+Issues Fixed in 12.0 M0 Release (12.0.273.0)
+----------------------------------------------------
+- DL-7xxx: Improved stability under heavy load with monitors in clone mode. (VIFR-5292)
+- DL-7xxx: Resolved an issue where monitors could remain blank after resuming the device from USB suspend. (VIFR-6275, VIFR-6542)
+- DL-7xxx: Resolved a problem where analog audio would stop functioning after the audio device was unplugged and reconnected. (VIFR-6056)
+- Resolved an issue where the driver could delay system shutdown. (VIFR-6275)
+
+D. How to Install and Use
+=========================
+Please find detailed guidance and information about how to install and use this
+software, see the articles on the DisplayLink support site:
+https://support.displaylink.com/knowledgebase/articles/615714
+
+Information on corporate deployment can be found here:
+https://support.displaylink.com/knowledgebase/articles/607686
+
+Corporations can download the MSI installation files from:
+https://synaptics.com/products/displaylink-graphics/downloads/corporate
+
+For further support and information about DisplayLink software, please visit
+https://support.displaylink.com
+
+E. Supported Operating Systems
+==============================
+This release can be installed on the following operating systems:
+
+- Windows 10 (x64 & ARM64 edition):
+	- Home (N)
+	- Pro (N)
+	- Pro (N) for Workstation 
+	- Pro (N) for Education
+	- Education (N)
+	- Enterprise (N)
+	- IoT Enterprise
+- Windows 11 (x64 & ARM64 edition):
+	- Home (N)
+	- Pro (N)
+	- Pro (N) for Workstation 
+	- Pro (N) for Education
+	- Education (N)
+	- Enterprise (N)
+	- IoT Enterprise
+
+DisplayLink for Windows on Arm64 is available on all packages except MSI.
+
+F. PC Recommended Specifications
+================================
+Please find detailed information about the minimum and recommended system
+specifications needed to run this software in the DisplayLink
+https://support.displaylink.com/knowledgebase/articles/524951
+
+G. Language Support
+===================
+Please find the complete list of languages supported by this software:
+https://support.displaylink.com/knowledgebase/articles/630820
+
+H. Supported Hardware
+=====================
+Devices supported:
+- DL-7400 / DL-7200
+- DL-6910 / DL-6350 / DL-6700 / DL-6950
+- DL-5500 / DL-5700 / DL-5900 / DL-5910
+- DL-4100
+- DL-3100 / DL-3500 / DL-3700 / DL-3900 / DL-3950
+- DL115 / DL125 / DL165 / DL195
+
+I. Known Issues and Limitations
+===============================
+System behaviour with DisplayLink attached screens has been well tested.
+Testing covers plug/unplug, mode changes, playing video, hibernate,
+sleep/standby, multiple users, different user rights, attached screen as
+primary screen, attached screen as only screen, and other aspects.
+
+- Devices with mass storage or auto-install are not supported by Windows
+10 UMDF USB driver DisplayLink uses (21959)
+
+- Windows 10 Anniversary Update sets the wrong preferred mode 9124025
+(23871)
+
+For information about specific issues please see the DisplayLink support
+knowledgebase: https://support.displaylink.com/knowledgebase

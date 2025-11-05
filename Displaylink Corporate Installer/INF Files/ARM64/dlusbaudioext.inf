@@ -1,0 +1,184 @@
+;
+;
+; DisplayLink USB Audio Adapter Extension Driver
+; Copyright (c) 2025 DisplayLink (UK) Ltd.
+;
+
+;******************************************************************************
+; Version Section
+;------------------------------------------------------------------------------
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = Extension
+ClassGuid   = {e2f84ce7-8efa-411c-aa69-97454ca4cb57}
+Provider    = %S_Provider%
+ExtensionId = {6a0b310f-2b5f-4302-83c2-d8b842e5f07a}
+DriverVer = 08/28/2025,12.1.2305.0
+CatalogFile = %S_DriverName%.cat
+PnpLockdown = 1
+
+[Manufacturer]
+%S_Mfg%=_Models,ntarm64.10.0...16288
+
+[_Models.ntarm64.10.0...16288]
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6000&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6001&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6002&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6003&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6004&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6005&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6006&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6007&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6008&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6009&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_600A&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_600B&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_600C&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_600D&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_600E&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_600F&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6010&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6011&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6012&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6013&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6014&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6015&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6016&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6017&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6018&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6019&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_601A&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_601B&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_601C&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_601D&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_601E&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_601F&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6020&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6021&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6022&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6023&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6024&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6025&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6026&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6027&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6028&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6029&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_602A&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_602B&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_602C&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_602D&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_602E&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_602F&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6030&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6031&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6032&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6033&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6034&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6035&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6036&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6037&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6038&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6039&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_603A&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_603B&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_603C&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_603D&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_603E&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_603F&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6040&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6041&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6042&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6043&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6044&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6045&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6046&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6047&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6048&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_6049&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_604A&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_604B&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_604C&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_604D&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_604E&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_604F&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_7000&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_7001&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_7002&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_7003&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_7004&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_7005&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_7006&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_7007&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_7008&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_7009&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_700A&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_700B&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_700C&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_700D&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_700E&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_700F&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_7010&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_7011&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_7012&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_7013&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_7014&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_7015&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_7016&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_7017&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_7018&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_7019&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_701A&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_701B&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_701C&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_701D&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_8100&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_8101&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_8102&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_8103&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_C055&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_C056&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_C057&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_C058&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_C059&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_C05A&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_C05B&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_C05C&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_C05D&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_C05E&MI_02
+%S_DeviceDesc%=DlAudioExtension_Install, USB\VID_17E9&PID_C05F&MI_02
+
+[DlAudioExtension_Install]
+AddReg = PowerSettings_AddReg
+
+[PowerSettings_AddReg]
+HKR,PowerSettings,ConservationIdleTime,%REG_BINARY%,1e,00,00,00
+HKR,PowerSettings,PerformanceIdleTime,%REG_BINARY%,2d,00,00,00
+HKR,PowerSettings,IdlePowerState,%REG_BINARY%,02,00,00,00
+
+;------------------------------------------------------------------------------
+[Strings]
+;
+; Non-Localizable Strings, DO NOT MODIFY!
+;
+REG_SZ         = 0x00000000
+REG_MULTI_SZ   = 0x00010000
+REG_EXPAND_SZ  = 0x00020000
+REG_BINARY     = 0x00000001
+REG_DWORD      = 0x00010001
+
+;
+; Localizable Strings, modify as required
+;
+; provider
+S_Provider="DisplayLink Corp."
+S_Mfg="DisplayLink"
+
+
+; device description
+S_DeviceDesc = "DisplayLink USB Audio Extension"
+
+; driver name
+S_DriverName="dlusbaudioext"
+
+;;;;;;;;;;;;;;;;;;;;;; EOF ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+

@@ -1,0 +1,152 @@
+=============================================================================
+=============================================================================
+
+        DisplayLink macOS Software Release Note
+
+Build: 5.2.90 (860432d)
+Date: 30th July 2020
+
+=============================================================================
+=============================================================================
+
+
+A. Introduction
+===============
+
+This is DisplayLink macOS Software v5.2.5 Release.
+
+This version supports macOS version 10.15.x. See section D for details.
+
+A full list of known issues can be found in the "Known issues and limitations" section below.
+
+More information on how to use this software can be found on the DisplayLink website (http://www.displaylink.com/mac)
+
+B. Contents
+===========
+
+A.  Introduction
+B.  Contents
+C.  Bugs fixed in this release
+D.  Supported operating systems
+E.  Language support
+F.  Supported hardware
+G.  Operating system limitations
+H.  Known issues and limitations
+
+C. Bugs fixed in this release
+=============================
+
+Bugs fixed in release 5.2.5
+-----------------------------
+- DisplayLink connected displays are mirrored instead of extended when monitor serial number is 0x01010101 (31841)
+
+Bugs fixed in release 5.2.4
+-----------------------------
+- Hub USB3.0 link power management control improvement to address connection stability (31500)
+
+- WindowServer memory usage increases after DisplayLink dock replug (30311)
+
+- All DisplayLink connected displays are in mirror mode (30765)
+
+Bugs fixed in release 5.2.1
+-----------------------------
+- Some of the higher resolution display modes aren't available (30511)
+
+- Framerate drop on some applications (30347)
+
+- DisplayLink device does not work after USB replug (30210)
+
+- DisplayLink displays are black on some iMacs (30740)
+
+- DisplayLink displays are black due to invalid kextcache after macOS upgrade to Catalina 10.15 (30737)
+
+Bugs fixed in release 5.2.0
+-----------------------------
+- DisplayLink monitors are blank or frozen after login (29539)
+
+- DL-3000/DL-5000 series, audio source did not switch to internal audio
+  automatically when switched to laptop display mode only. (27792)
+
+- Abnormal HDMI video on 2560x1440@75 mode for specific monitor when
+  connected through PS176 converter. (29523)
+
+- DL-6000 series: if 2 DisplayPort + 1 HDMI displays are connected to the
+  chip and HDMI is removed during sleep, the matching DisplayPort output
+    doesn't light up at sleep recovery. (29625)
+
+- Improvement: change audio output to laptop internal when DisplayLink
+  video output is disabled. (29434)
+
+- DL-6000 series: 4K monitor could only reach 2048x1152 when connected via
+  some DisplayPort++ type 2 passive adapter (29859)
+
+- On mixed technology DL-6000 series product, the HDMI output may only
+  be driven at 4Kp30 max instead of 4Kp60 even with DisplayLink
+    driver installed (29964)
+
+- Monitor connected to DL-6xxx has fixed resolution of 640X480 (29679)
+
+D. Supported operating systems
+==============================
+
+The DisplayLink software can be installed on any desktop or laptop Apple Mac computer running client versions:
+ - macOS Mojave 10.14.6
+ - macOS Catalina 10.15.4
+At the time of writing these were the latest available versions of macOS tested against: later OS versions might show compatibility issues.
+
+OS X versions earlier than 10.14.0 are not supported. Earlier versions of the DisplayLink software can be used but may not be fully functional with all DisplayLink devices:
+ - Version 4.3 was the last version to support macOS High Sierra 10.13.x.
+ - Version 3.1 was the last version to support OS X Yosemite 10.10.x.
+Visit http://www.displaylink.com/mac to download older drivers versions.
+
+
+E. Language support
+===================
+
+The DisplayLink software installer is only available in English.
+
+
+F. Supported hardware
+=====================
+
+DisplayLink IC series supported:
+- DL-6xxx
+- DL-5xxx
+- DL-41xx
+- DL-3xxx
+- DL-1x5
+
+
+G. Operating system limitations
+================================
+
+General limitations
+-------------------
+
+DisplayLink screens are not available at the first login screen when FileVault is enabled. (21278)
+
+Protected content from iTunes and other players is not visible on built-in graphics when DisplayLink screens are connected. (17087)
+
+The list of available resolutions and the default resolution for 4K displays depends on the type of connection (HDMI or DisplayPort). To see a more complete list of resolutions follow these steps:
+- Open the Displays preference in System Preferences
+- Go to the preferences panel for the DisplayLink screen
+- While keeping the option (alt) key pressed, select the "Scaled" option for the list of resolutions.
+
+Manual Ethernet speed setting is not retained across reboots. (20973)
+
+DisplayLink screens are black with only mouse cursor visible on MacBook Pro 2018 with initial macOS 10.14.0. (28503)
+
+H. Known issues and limitations
+===============================
+
+An updated list of troubleshooting suggestions is available at http://support.displaylink.com/knowledgebase/
+
+Not all display modes are available for rotated DisplayLink screens. (13464)
+
+Retina resolutions on DisplayLink screens may result in reduced performance. For higher performance use the screen at its native resolution. (21314)
+
+Some color calibration applications may not be able to affect DisplayLink screens.
+
+Some options in the Accessibility system preference have no effect on DisplayLink screens, for example "Invert colours" and contrast settings.
+
+Some advanced DL-41xx features are not supported on the macOS platform: On Screen Display, splash screen and connection status feedback.

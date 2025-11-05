@@ -1,0 +1,336 @@
+#! /usr/bin/env bash
+# Copyright (c) 2016 - 2020 DisplayLink (UK) Ltd.
+
+set -e
+set -u
+
+usage() {
+  local bold=
+  bold=$(tput bold)
+  local underline=
+  underline=$(tput smul)
+  local normal=
+  normal=$(tput sgr0)
+
+  cat << EOF
+${bold}SYNOPSIS${normal}
+      ${bold}${0}${normal} [MODE] [OPTION]... [PARAMETER]...
+
+${bold}DESCRIPTION${normal}
+      Script automates ${underline}module${normal} build against specific ${underline}kernel${normal} version.
+      It can download fresh copy of sources from ${underline}github${normal}, untar it,
+      prepare and build evdi in this 'sandboxed' environment.
+
+${bold}MODES${normal}
+      ${bold}--clean${normal}
+            Get clean version of ${bold}tar.gz${normal}.
+            This is the ${underline}default${normal} behaviour.
+      ${bold}--cached${normal}
+            Use previously downloaded ${bold}tar.gz${normal}.
+      ${bold}--ci${normal}
+            Use previously extracted sources from ${bold}tar.gz${normal}.
+
+      ${bold}--repo${normal}
+      ${bold}--repo-clean${normal}
+            Use clean clone from updated local mirror of ${underline}kernel${normal} repository.
+      ${bold}--repo-cached${normal}
+            Use clean clone from local mirror of ${underline}kernel${normal} repository.
+      ${bold}--repo-ci${normal}
+            Use previous clone from local mirror of ${underline}kernel${normal} repository.
+
+${bold}OPTIONS${normal}
+      ${bold}-j${normal} ${underline}jobs${normal}, ${bold}--jobs=${normal}${underline}jobs${normal}, ${bold}--jobs${normal} ${underline}jobs${normal}
+            Specifies the number of commands to run simultaneously.
+            Similar as in ${bold}make${normal}.
+            Default is ${underline}1${normal}.
+
+      ${bold}-t${normal} ${underline}dir${normal}, ${bold}--tmp=${normal}${underline}dir${normal}, ${bold}--tmp${normal} ${underline}dir${normal}
+            Subdirectory to store kernel sources.
+            Default is ${underline}tmp${normal}.
+
+      ${bold}--help${normal}
+            Show this message.
+
+${bold}PARAMETERS${normal}
+      ${bold}all${normal}
+            Build against all ${underline}KVER${normal} specified in ${bold}.travis.yml${normal} file.
+      ${underline}KVERS${normal}
+            List of kernel versions to build against (e.g. ${underline}3.19 4.10${normal}).
+
+${bold}EXAMPLES${normal}
+      ${bold}${0} 4.12${normal}
+            Build against newly downloaded sources of ${underline}4.12${normal}.
+
+      ${bold}${0} --ci master${normal}
+            Build against already ${underline}extracted${normal} sources of ${underline}master${normal}.
+
+      ${bold}${0} --ci master --cached 4.11${normal}
+            Build against already ${underline}extracted${normal} sources of ${underline}master${normal} and
+            clean sources of previously ${underline}cached${normal} ${bold}tar.gz${normal} of ${underline}4.11${normal}.
+
+      ${bold}${0} -j 4 all${normal}
+            Build against ${underline}all${normal} kernels listed in ${bold}.travis.yml${normal}
+            file, passing ${underline}--jobs=4${normal} to ${bold}make${normal}.
+
+      ${bold}${0} --repo-cached 5.5${normal}
+            Build against clean clone of ${underline}5.5${normal} kernel from local
+            ${underline}kernel${normal} mirror.
+
+      ${bold}${0} --repo-ci 5.6-rc1${normal}
+            Build against prevously cloned ${underline}5.6-rc1${normal} kernel from
+            local ${underline}kernel${normal} mirror.
+EOF
+}
+
+get_versions_from_file() { # file
+  local PREFIX="^  \\- KVER="
+  grep "${PREFIX}" < "${1}" | sed -e "s/${PREFIX}//g"
+}
+
+get_supported_linux_versions() {
+  set +e
+  local repo_dir
+  repo_dir="$(pwd)/$TMP/linux"
+  local CC="${CC:-gcc}"
+  mkdir -p "$TMP"
+  (cd "$TMP"
+  prepare_repo_sources "origin/master" "${CC}" 1>&2 2>/dev/null)
+
+  (cd "$repo_dir"
+      git fetch --tags 1>&2 2>/dev/null
+      local supported_versions=""
+      supported_versions=$(git tag --sort=-creatordate -l 'v*' | grep -v "rc" | grep -v "v1" | grep -v "v2" | grep -v "v3" | grep -v "v4" | xargs)
+      supported_versions="$supported_versions v4.19 v4.20"
+      echo "$supported_versions"
+  )
+}
+
+get_last_linux_rc_tag() {
+  local repo_dir
+  repo_dir="$(pwd)/$TMP/linux"
+  local CC="${CC:-gcc}"
+  mkdir -p "$TMP"
+
+  (cd "$TMP"
+  prepare_repo_sources "origin/master" "${CC}" 1>&2 2>/dev/null)
+
+  (cd "$repo_dir"
+      git fetch --tags
+      git tag --sort=-creatordate | grep "\\-rc" | head -n 1
+  )
+}
+
+prepare_tar_gz_sources() { # PACKAGE SOURCES CC
+  local PACKAGE="${1}.tar.gz"
+  local SOURCES="${2}"
+  local CC="${3}"
+  local SRC_DIR=
+  SRC_DIR="$(pwd)/${SOURCES}"
+
+  if [ "${MODE}" = "CLEAN" ]; then
+    rm -f "${PACKAGE}"
+  fi
+
+  if [ ! -e "${PACKAGE}" ]; then
+    wget -O "${PACKAGE}" "https://github.com/torvalds/linux/archive/${PACKAGE}"
+  fi
+
+  if [ "${MODE}" = "CLEAN" ] || [ "${MODE}" = "CACHED" ]; then
+    rm -rf "${SOURCES}"
+  fi
+
+  if [ ! -e "${SOURCES}" ]; then
+    tar -xzf "${PACKAGE}"
+    prepare_kernel "${SRC_DIR}" "${CC}"
+  elif [ "${MODE}" != "CI" ]; then
+    prepare_kernel "${SRC_DIR}" "${CC}"
+  fi
+}
+
+clone_linux()
+{
+  local linux_mirror="https://oauth2:glpat-jeZZawHtkoZ3xLHWGCJQ@gitlab/ppd_posix/linux.git"
+  if curl -k --output /dev/null --silent -m 5 --head --fail "$linux_mirror"; then
+    git -c http.sslVerify=false clone "$linux_mirror"
+    (cd linux; git config http.sslVerify false)
+  else
+    git clone https://github.com/torvalds/linux
+  fi
+}
+
+prepare_repo_sources() { # PACKAGE CC
+  local PACKAGE="${1}"
+  local CC="${2}"
+  local SRC_DIR=
+  SRC_DIR="$(pwd)/linux"
+
+  echo "Package = $PACKAGE"
+  echo "CC=$CC"
+  echo "SRC_DIR = $SRC_DIR"
+
+  if [ ! -e linux ]; then
+    clone_linux
+  fi
+
+  (cd linux
+  git fetch
+  git fetch --tags
+  git clean -fdx
+  git checkout "$PACKAGE" -f
+
+  prepare_kernel "${SRC_DIR}" "${CC}")
+}
+
+prepare_sources() { ( # PACKAGE SOURCES CC
+  if [ ! -d "${TMP}" ]; then
+    mkdir "${TMP}"
+  fi
+
+  cd "${TMP}"
+
+  if [[ ${MODE} == REPO* ]]; then
+    prepare_repo_sources "${1}" "${3}"
+  else
+    prepare_tar_gz_sources "${1}" "${2}" "${3}"
+  fi
+) }
+
+increment_kernel_version()
+{
+  (cd "$1"
+  REGEX="\(VERSION *= *\)\([0-9]\+\)"
+
+  version=$(sed -ne "s/${REGEX}/\2/p" Makefile | head -1)
+  ((version++))
+
+  sed -ie "s/${REGEX}/\1${version}/" Makefile
+  )
+}
+
+prepare_kernel() { ( # SRC_DIR CC
+  cd "${1}"
+  if [[ "${KVER}" == "master" ]] ; then
+    increment_kernel_version "${1}"
+  fi
+
+  make olddefconfig CC="${2}" --jobs="${JOBS}"
+  make prepare CC="${2}" --jobs="${JOBS}"
+  make modules_prepare CC="${2}" --jobs="${JOBS}"
+
+  if [[ "${KVER}" != "master" ]] ; then 
+    if [[ "${KVER:0:1}" -lt "5" ]]; then
+      make scripts CC="${2}" --jobs="${JOBS}"
+    fi
+  fi
+) }
+
+build_one() { # KVER
+  local KVER=${1}
+  local CC="${CC:-gcc}"
+
+  local HEADER="# Running ${MODE} --jobs=${JOBS} build for ${KVER} in ${TMP}"
+
+  echo ""
+  echo "${HEADER//?/#}"
+  echo "${HEADER}"
+  echo ""
+
+  local src_dir
+  local KTAG=v${KVER}
+  local extra_cflags="-DCONFIG_FB"
+  if [ "${KVER}" == "master" ]; then
+    KTAG="origin/master"
+  else
+    KTAG="v$KVER"
+  fi
+  prepare_sources "$KTAG" "linux-$KVER" "${CC}"
+  src_dir="$(pwd)/${TMP}/linux-$KVER"
+  if [[ ${MODE} == REPO* ]]; then
+    src_dir="$(pwd)/${TMP}/linux"
+  fi
+  if [[ "${KVER}" != "master" ]] ; then
+    [[ ${KVER:0:1} -lt "5" ]] && extra_cflags="-Wno-discarded-qualifiers"
+    [[ ${KVER:0:1} == "5" ]] && [[ ${KVER:2:2} -lt "6" ]] && extra_cflags="-Wno-discarded-qualifiers"
+  fi
+  CFLAGS="$extra_cflags" make -C module KBUILD_MODPOST_WARN=1 KDIR="${src_dir}" CC="${CC}" --jobs="${JOBS}"
+}
+
+
+MODE="CLEAN"
+JOBS="1"
+TMP="tmp"
+while [[ $# -gt 0 ]]
+do
+  case ${1} in
+    --clean)
+      MODE="CLEAN"
+      ;;
+
+    --cached)
+      MODE="CACHED"
+      ;;
+
+    --ci)
+      MODE="CI"
+      ;;
+
+    --repo-ci)
+      MODE="REPO-CI"
+      ;;
+
+    -j|--jobs)
+      shift
+      JOBS="${1}"
+      ;;
+
+    --jobs=*)
+      JOBS="${1#*=}"
+      ;;
+
+    -t|--tmp)
+      shift
+      TMP="${1}"
+      ;;
+
+    --tmp=*)
+      TMP="${1#*=}"
+      ;;
+
+    -h|--help)
+      usage
+      exit 0
+      ;;
+
+    --list-kernels)
+      MODE="REPO-CI"
+      get_supported_linux_versions
+      exit 0
+      ;;
+
+    -*)
+      echo "Unknown option '${1}'" >&2
+      usage >&2
+      exit 1
+      ;;
+
+    rc)
+      KVER=$(get_last_linux_rc_tag)
+      KVER=${KVER:1}
+      build_one "${KVER}"
+      ;;
+
+    all)
+      for KVER in $(get_supported_linux_versions); do
+        KVER=${KVER:1}
+        build_one "${KVER}"
+      done
+      ;;
+
+    *)
+      build_one "${1}"
+      ;;
+  esac
+
+  shift
+done
+
