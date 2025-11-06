@@ -7,36 +7,39 @@ An open-source Linux driver for DisplayLink USB docks, written in Rust.
 *   **Vendor ID (VID):** `0x17e9`
 *   **Product ID (PID):** `0x4307`
 
-## Status: ✅ Production Ready
+## Current Status
 
-**All 6 phases completed** - fully functional driver with reverse-engineered DisplayLink USB protocol.
+### ✅ Completed (Phases 1-4)
+- USB device detection and enumeration
+- EVDI library integration with FFI bindings
+- Virtual display creation and EDID configuration
+- Event handling framework (mode changes, DPMS, cursor, DDC/CI)
+- USB interface claiming and kernel driver management
+- Multi-monitor support with hot-plug detection
+- Dynamic resolution changing
+- Power management (DPMS)
+- Network adapter support (interface 5)
 
-### Core Features
-- ✅ Complete DisplayLink USB protocol implementation
-- ✅ Framebuffer compression/decompression (RLE, BGRA32→RGB565)
-- ✅ Actual pixel data transmission via bulk transfers
-- ✅ Device-specific initialization sequences
-- ✅ Multi-monitor support (unlimited devices)
-- ✅ Hot-plug detection (dynamic connect/disconnect)
-- ✅ Dynamic resolution changing (1920x1080, 1280x720, 1024x768, custom)
-- ✅ Full DPMS power management (ON/STANDBY/SUSPEND/OFF)
-- ✅ Performance optimizations (buffer pooling, ~66fps Full HD)
-- ✅ Network adapter support (CDC NCM, interface 5)
-- ✅ EVDI integration with auto-generated FFI bindings
-- ✅ Comprehensive testing suite
+### 🚧 In Progress (Phase 5-6)
+**Critical features needed for functional display:**
+- [ ] **DisplayLink USB protocol implementation**
+  - Vendor-specific USB control transfers
+  - Register read/write commands
+  - Device capability detection
+- [ ] **Framebuffer compression/decompression**
+  - BGRA32 → RGB565 color conversion
+  - RLE (Run-Length Encoding) compression
+  - Compression optimization
+- [ ] **Actual pixel data transmission**
+  - USB bulk transfer implementation
+  - Chunked data transmission (16KB max)
+  - Damage rectangle updates
+- [ ] **Device-specific initialization**
+  - Display mode configuration
+  - Timing register programming
+  - Screen blanking control
 
-### USB Protocol Implementation
-**Fully reverse-engineered and implemented:**
-- USB control transfers for device initialization (vendor request 0x12)
-- Register-based display mode configuration
-- RLE framebuffer compression (BGRA32 → RGB565)
-- Bulk transfer protocol with damage rectangles
-- Screen blanking and sync commands
-- Command format with register writes
-- Chunked transfer support (16KB max per chunk)
-
-Based on analysis of Linux udlfb kernel driver and public specifications.
-See [PROTOCOL.md](PROTOCOL.md) for complete technical details.
+See [PROTOCOL.md](PROTOCOL.md) for DisplayLink protocol details.
 
 ## Quick Start
 
@@ -60,8 +63,7 @@ cd STARDRIVE
 
 # 2. Build and install EVDI library
 cd evdi_source/library
-make
-sudo make install
+make && sudo make install
 cd ../..
 
 # 3. Install EVDI kernel module
@@ -74,38 +76,36 @@ cd ../..
 cd displaylink-driver
 cargo build --release
 
-# 5. Run the driver
+# 5. Run the driver (requires Phase 5-6 completion for display output)
 sudo ./target/release/displaylink-driver
 ```
 
-See [BUILD.md](BUILD.md) for detailed build instructions.
+See [BUILD.md](BUILD.md) for detailed instructions.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────┐
-│     DisplayLink Manager (v0.2.0)        │
-│  Multi-monitor + Hot-plug Detection     │
-├─────────────────────────────────────────┤
-│  DisplayLinkDriver (per device)         │
-│    ├─ EVDI (Virtual Display)            │
-│    ├─ USB Protocol (Framebuffer TX)     │
-│    ├─ RLE Compressor (RGB565)           │
-│    └─ Network Adapter (CDC NCM)         │
-└─────────────────────────────────────────┘
-           │              │
-           ▼              ▼
-    ┌───────────┐  ┌──────────┐
-    │  evdi.ko  │  │ USB Core │
-    │ (Kernel)  │  │ (libusb) │
-    └─────┬─────┘  └────┬─────┘
-          │             │
-          └──────┬──────┘
-                 ▼
-          ┌──────────────┐
-          │  DRM/KMS     │
-          │  X11/Wayland │
-          └──────────────┘
+┌──────────────────────────────────────┐
+│   DisplayLink Manager (Multi-monitor)│
+├──────────────────────────────────────┤
+│  DisplayLinkDriver (per device)      │
+│    ├─ EVDI (Virtual Display) ✅      │
+│    ├─ USB Protocol ⚠️ TODO           │
+│    ├─ Framebuffer Compression ⚠️ TODO│
+│    └─ Pixel Transmission ⚠️ TODO     │
+└──────────────────────────────────────┘
+         │              │
+         ▼              ▼
+  ┌───────────┐  ┌──────────┐
+  │  evdi.ko  │  │ USB Core │
+  └─────┬─────┘  └────┬─────┘
+        │             │
+        └──────┬──────┘
+               ▼
+        ┌──────────────┐
+        │  DRM/KMS     │
+        │  X11/Wayland │
+        └──────────────┘
 ```
 
 ## Development Phases
@@ -116,54 +116,46 @@ See [BUILD.md](BUILD.md) for detailed build instructions.
 | 2 | EVDI Integration | ✅ Complete |
 | 3 | Windows Driver Analysis | ✅ Complete |
 | 4 | USB Infrastructure | ✅ Complete |
-| 5 | USB Protocol Implementation | ✅ Complete |
-| 6 | Multi-monitor & Advanced Features | ✅ Complete |
+| 5 | **USB Protocol & Compression** | 🚧 **In Progress** |
+| 6 | Advanced Features | ✅ Complete |
 
-See [PHASE6.md](PHASE6.md) for Phase 6 feature details.
+## Next Steps (Phase 5)
 
-## Features
+To make the driver fully functional, the following critical components need implementation:
 
-### USB Protocol & Framebuffer
-- **DisplayLink USB Protocol**: Fully implemented vendor-specific protocol
-- **Device Initialization**: Channel init, register configuration, mode setup
-- **Framebuffer Compression**: RLE encoding of RGB565 data (~3:1 compression)
-- **Bulk Transfers**: Chunked data transmission (16KB chunks)
-- **Damage Rectangles**: Partial screen update support
-- **Pixel Pipeline**: BGRA32 → RGB565 → RLE → USB bulk transfer
+1. **USB Protocol Layer**
+   - Reverse-engineer DisplayLink command format
+   - Implement register-based communication
+   - Add display mode configuration
 
-### Display Management
-- **Multi-Monitor**: Support for multiple DisplayLink devices simultaneously
-- **Hot-Plug**: Automatic detection and initialization (2-second scan interval)
-- **Dynamic Modes**: On-the-fly resolution changes (no restart required)
-- **Timing Generation**: Automatic VESA/HDMI timing calculation
-- **Power Management**: Full DPMS support with screen blanking
+2. **Compression Engine**
+   - Implement BGRA32 → RGB565 conversion
+   - Add RLE compression algorithm
+   - Optimize for performance
 
-### Performance
-- **Optimized Compression**: Pre-allocated buffers, zero-copy where possible
-- **Throughput**: ~66 frames/sec for 1920x1080 (single monitor)
-- **Multi-threaded**: Concurrent event loops per device
-- **Low Latency**: ~20ms total pipeline (compression + USB transfer)
+3. **Data Transmission**
+   - Implement bulk transfer protocol
+   - Add chunking for large framebuffers
+   - Handle USB errors and retries
+
+4. **Display Initialization**
+   - Configure timing registers
+   - Set pixel clock and sync signals
+   - Enable display output
 
 ## Testing
 
 ```bash
-# Run all tests
+# Run tests (unit tests pass, integration requires Phase 5 completion)
 cd displaylink-driver
 cargo test
-
-# Run specific tests
-cargo test test_rle_compression
-cargo test test_mode_configurations
-
-# Run with output
-cargo test -- --nocapture
 ```
 
 ## Documentation
 
-- **[BUILD.md](BUILD.md)** - Comprehensive build and installation guide
-- **[PROTOCOL.md](PROTOCOL.md)** - DisplayLink USB protocol specification
-- **[PHASE6.md](PHASE6.md)** - Phase 6 advanced features documentation
+- **[BUILD.md](BUILD.md)** - Build and installation guide
+- **[PROTOCOL.md](PROTOCOL.md)** - DisplayLink USB protocol documentation
+- **[PHASE6.md](PHASE6.md)** - Advanced features documentation
 
 ## Requirements
 
@@ -173,59 +165,27 @@ cargo test -- --nocapture
 - libdrm development headers
 - libusb 1.0
 
-## Compatibility
-
-**Tested on:**
-- Ubuntu 20.04+
-- Debian 11+
-- Fedora 35+
-- Arch Linux
-
-**Supported Devices:**
-- StarTech USB35DOCK (primary)
-- Other DisplayLink DL-3xxx/DL-4xxx series devices (untested)
-
 ## Troubleshooting
 
-**Driver not finding device:**
+**EVDI module not loading:**
 ```bash
-# Check device is connected
+sudo modprobe evdi
+dmesg | grep evdi
+```
+
+**USB device not found:**
+```bash
 lsusb | grep 17e9
-
-# Check EVDI module is loaded
-lsmod | grep evdi
-
-# Check permissions
 sudo usermod -a -G plugdev $USER
-```
-
-**Display not appearing:**
-```bash
-# List DRM devices
-ls -l /dev/dri/card*
-
-# Check X11 displays
-xrandr --listproviders
-```
-
-**Build errors:**
-```bash
-# Ensure EVDI is built first
-cd evdi_source/library && make && sudo make install
-cd ../module && sudo make install
-
-# Update library cache
-sudo ldconfig
 ```
 
 ## Contributing
 
-Contributions welcome! Areas for improvement:
-- Additional DisplayLink device support
-- Hardware cursor implementation
-- H.264 compression support
-- Automatic EDID reading
-- udev integration for instant hot-plug
+**Priority areas for contribution:**
+1. USB protocol reverse engineering (Phase 5 - critical)
+2. Framebuffer compression implementation
+3. Bulk transfer protocol
+4. Additional DisplayLink device support
 
 ## License
 
@@ -233,4 +193,4 @@ MIT License - See LICENSE file for details.
 
 ## Disclaimer
 
-This is an independent reverse-engineering project not affiliated with DisplayLink/Synaptics. Protocol implementation based on open-source analysis. Use at your own risk.
+Independent reverse-engineering project. Not affiliated with DisplayLink/Synaptics. Based on open-source analysis. Use at your own risk.
