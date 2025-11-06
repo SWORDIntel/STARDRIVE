@@ -5,6 +5,7 @@
 #![allow(dead_code)]
 
 mod displaylink_protocol;
+mod network_adapter;
 
 use rusb::{Device, DeviceDescriptor, DeviceHandle, UsbContext};
 use std::ptr;
@@ -12,8 +13,10 @@ use std::ffi::c_void;
 use std::time::Duration;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::collections::HashMap;
 
 use displaylink_protocol::*;
+use network_adapter::NetworkAdapter;
 
 // Include auto-generated EVDI bindings
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
@@ -46,14 +49,28 @@ const DEFAULT_EDID: &[u8] = &[
     0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x01, 0x08,
 ];
 
+// Wrapper to make evdi_handle Send (EVDI is thread-safe in practice)
+struct SendEvdiHandle(evdi_handle);
+unsafe impl Send for SendEvdiHandle {}
+unsafe impl Sync for SendEvdiHandle {}
+
+// Multi-monitor manager with hot-plug support
+struct DisplayLinkManager {
+    drivers: Arc<Mutex<HashMap<String, DisplayLinkDriver>>>,
+    context: Arc<rusb::Context>,
+}
+
 // Driver state
 struct DisplayLinkDriver {
-    evdi_handle: evdi_handle,
+    device_id: String,
+    evdi_handle: SendEvdiHandle,
     usb_handle: Arc<Mutex<DeviceHandle<rusb::Context>>>,
     current_mode: Option<evdi_mode>,
     buffers: Vec<FrameBuffer>,
     compressor: RLECompressor,
     cmd_builder: CommandBuilder,
+    running: Arc<Mutex<bool>>,
+    network_adapter: Option<NetworkAdapter>,
 }
 
 struct FrameBuffer {
@@ -65,14 +82,22 @@ struct FrameBuffer {
 }
 
 impl DisplayLinkDriver {
-    fn new(evdi_handle: evdi_handle, usb_handle: DeviceHandle<rusb::Context>) -> Self {
+    fn new(device_id: String, evdi_handle: evdi_handle, usb_handle: DeviceHandle<rusb::Context>) -> Self {
+        let usb_handle_arc = Arc::new(Mutex::new(usb_handle));
+
+        // Initialize network adapter
+        let network_adapter = NetworkAdapter::new(usb_handle_arc.clone(), device_id.clone());
+
         DisplayLinkDriver {
-            evdi_handle,
-            usb_handle: Arc::new(Mutex::new(usb_handle)),
+            device_id,
+            evdi_handle: SendEvdiHandle(evdi_handle),
+            usb_handle: usb_handle_arc,
             current_mode: None,
             buffers: Vec::new(),
             compressor: RLECompressor::new(),
             cmd_builder: CommandBuilder::new(),
+            running: Arc::new(Mutex::new(true)),
+            network_adapter: Some(network_adapter),
         }
     }
 
@@ -97,6 +122,11 @@ impl DisplayLinkDriver {
             handle.claim_interface(DISPLAY_INTERFACE)
                 .map_err(|e| format!("Failed to claim interface: {}", e))?;
         }  // Drop handle lock here
+
+        // Initialize network adapter (non-fatal if fails)
+        if let Some(ref mut net_adapter) = self.network_adapter {
+            let _ = net_adapter.initialize();
+        }
 
         // Send initialization sequence to DisplayLink device
         self.send_init_sequence()?;
@@ -225,7 +255,7 @@ impl DisplayLinkDriver {
         };
 
         unsafe {
-            evdi_register_buffer(self.evdi_handle, evdi_buf);
+            evdi_register_buffer(self.evdi_handle.0, evdi_buf);
         }
 
         self.buffers.push(framebuffer);
@@ -236,39 +266,80 @@ impl DisplayLinkDriver {
 
     // Handle EVDI events
     fn handle_events(&mut self) {
-        unsafe extern "C" fn dpms_handler(dpms_mode: i32, _user_data: *mut c_void) {
-            println!("DPMS mode changed: {}", dpms_mode);
-            // Handle display power management
+        unsafe extern "C" fn dpms_handler(dpms_mode: i32, user_data: *mut c_void) {
+            let driver = &mut *(user_data as *mut DisplayLinkDriver);
+            println!("[{}] DPMS mode changed: {} ({})",
+                driver.device_id,
+                dpms_mode,
+                match dpms_mode {
+                    0 => "ON",
+                    1 => "STANDBY",
+                    2 => "SUSPEND",
+                    3 => "OFF",
+                    _ => "UNKNOWN",
+                }
+            );
+
+            // Blank or unblank screen based on DPMS mode
+            let should_blank = dpms_mode != 0;  // Blank for all modes except ON
+            let blank_cmd = driver.cmd_builder.blank_screen(should_blank).to_vec();
+
+            if let Err(e) = driver.send_bulk_data(&blank_cmd) {
+                eprintln!("[{}] Failed to set DPMS mode: {}", driver.device_id, e);
+            }
         }
 
         unsafe extern "C" fn mode_changed_handler(mode: evdi_mode, user_data: *mut c_void) {
             let driver = &mut *(user_data as *mut DisplayLinkDriver);
-            println!("Mode changed: {}x{}@{}Hz",
-                mode.width, mode.height, mode.refresh_rate);
+            println!("[{}] Mode changed: {}x{}@{}Hz (dynamic resolution)",
+                driver.device_id, mode.width, mode.height, mode.refresh_rate);
             driver.current_mode = Some(mode);
+
+            // Calculate timing parameters based on resolution
+            let (pixel_clock, hsync_start, hsync_end, htotal, vsync_start, vsync_end, vtotal) =
+                match (mode.width, mode.height) {
+                    (1920, 1080) => (148500, 1920 + 88, 1920 + 88 + 44, 2200, 1080 + 4, 1080 + 4 + 5, 1125),
+                    (1280, 720) => (74250, 1280 + 110, 1280 + 110 + 40, 1650, 720 + 5, 720 + 5 + 5, 750),
+                    (1024, 768) => (65000, 1024 + 24, 1024 + 24 + 136, 1344, 768 + 3, 768 + 3 + 6, 806),
+                    _ => {
+                        // Generic timing for other resolutions
+                        let h_blank = (mode.width / 5) as u32;
+                        let v_blank = (mode.height / 30) as u32;
+                        let pixel_clock = (mode.width as u32 + h_blank) * (mode.height as u32 + v_blank) *
+                                         mode.refresh_rate as u32 / 1000;
+                        (pixel_clock,
+                         mode.width as u32 + h_blank / 2,
+                         mode.width as u32 + h_blank / 2 + h_blank / 10,
+                         mode.width as u32 + h_blank,
+                         mode.height as u32 + v_blank / 2,
+                         mode.height as u32 + v_blank / 2 + v_blank / 10,
+                         mode.height as u32 + v_blank)
+                    }
+                };
 
             // Create DisplayLink mode configuration
             let dl_mode = DisplayMode {
                 width: mode.width as u32,
                 height: mode.height as u32,
                 refresh_rate: mode.refresh_rate as u32,
-                pixel_clock: 148500,  // Will be calculated based on mode
-                hsync_start: mode.width as u32 + 88,
-                hsync_end: mode.width as u32 + 88 + 44,
-                htotal: mode.width as u32 + 280,
-                vsync_start: mode.height as u32 + 4,
-                vsync_end: mode.height as u32 + 4 + 5,
-                vtotal: mode.height as u32 + 45,
+                pixel_clock,
+                hsync_start,
+                hsync_end,
+                htotal,
+                vsync_start,
+                vsync_end,
+                vtotal,
             };
 
             // Send mode to DisplayLink device
             if let Err(e) = driver.send_mode_set(&dl_mode) {
-                eprintln!("Failed to set DisplayLink mode: {}", e);
+                eprintln!("[{}] Failed to set DisplayLink mode: {}", driver.device_id, e);
+                return;
             }
 
             // Register new buffer for new mode
             if let Err(e) = driver.register_buffer(mode.width, mode.height) {
-                eprintln!("Failed to register buffer: {}", e);
+                eprintln!("[{}] Failed to register buffer: {}", driver.device_id, e);
             }
         }
 
@@ -277,7 +348,7 @@ impl DisplayLinkDriver {
             println!("Update ready for buffer {}", buffer_id);
 
             // Request pixel data from EVDI
-            evdi_grab_pixels(driver.evdi_handle, ptr::null_mut(), ptr::null_mut());
+            evdi_grab_pixels(driver.evdi_handle.0, ptr::null_mut(), ptr::null_mut());
 
             // Send framebuffer to DisplayLink device
             // Find buffer and clone necessary data to avoid borrow issues
@@ -327,17 +398,26 @@ impl DisplayLinkDriver {
         };
 
         unsafe {
-            evdi_handle_events(self.evdi_handle, &mut event_context);
+            evdi_handle_events(self.evdi_handle.0, &mut event_context);
         }
     }
 
     // Main event loop
     fn run(&mut self) -> Result<(), String> {
-        println!("Starting DisplayLink driver event loop...");
+        println!("[{}] Starting DisplayLink driver event loop...", self.device_id);
 
         loop {
+            // Check if we should continue running
+            {
+                let running = self.running.lock().unwrap();
+                if !*running {
+                    println!("[{}] Stopping driver", self.device_id);
+                    break;
+                }
+            }
+
             unsafe {
-                let event_fd = evdi_get_event_ready(self.evdi_handle);
+                let event_fd = evdi_get_event_ready(self.evdi_handle.0);
                 if event_fd != -1 {
                     self.handle_events();
                 }
@@ -346,17 +426,24 @@ impl DisplayLinkDriver {
             // Small delay to prevent busy waiting
             thread::sleep(Duration::from_millis(10));
         }
+
+        Ok(())
+    }
+
+    fn stop(&mut self) {
+        let mut running = self.running.lock().unwrap();
+        *running = false;
     }
 }
 
 impl Drop for DisplayLinkDriver {
     fn drop(&mut self) {
-        println!("Shutting down DisplayLink driver...");
+        println!("[{}] Shutting down DisplayLink driver...", self.device_id);
 
         // Disconnect from EVDI
         unsafe {
-            evdi_disconnect(self.evdi_handle);
-            evdi_close(self.evdi_handle);
+            evdi_disconnect(self.evdi_handle.0);
+            evdi_close(self.evdi_handle.0);
         }
 
         // Release USB interface
@@ -366,9 +453,136 @@ impl Drop for DisplayLinkDriver {
     }
 }
 
+impl DisplayLinkManager {
+    fn new(context: rusb::Context) -> Self {
+        DisplayLinkManager {
+            drivers: Arc::new(Mutex::new(HashMap::new())),
+            context: Arc::new(context),
+        }
+    }
+
+    fn initialize_device(&self, device: Device<rusb::Context>) -> Result<(), String> {
+        let device_desc = device.device_descriptor()
+            .map_err(|e| format!("Failed to get device descriptor: {}", e))?;
+
+        if device_desc.vendor_id() != DISPLAYLINK_VID || device_desc.product_id() != DISPLAYLINK_PID {
+            return Err("Not a DisplayLink device".to_string());
+        }
+
+        let device_id = format!("{}:{}", device.bus_number(), device.address());
+
+        // Check if already initialized
+        {
+            let drivers = self.drivers.lock().unwrap();
+            if drivers.contains_key(&device_id) {
+                return Ok(());
+            }
+        }
+
+        println!("Initializing DisplayLink device: {}", device_id);
+        println!("  Bus: {}, Address: {}", device.bus_number(), device.address());
+        println!("  VID: 0x{:04X}, PID: 0x{:04X}",
+            device_desc.vendor_id(), device_desc.product_id());
+
+        let handle = device.open()
+            .map_err(|e| format!("Failed to open device: {}", e))?;
+
+        // Create EVDI device
+        let evdi_handle = unsafe {
+            let card_no = evdi_add_device();
+            if card_no < 0 {
+                return Err("Failed to add EVDI device".to_string());
+            }
+            println!("  Created EVDI device: /dev/dri/card{}", card_no);
+
+            let handle = evdi_open(card_no);
+            if handle == EVDI_INVALID_HANDLE {
+                return Err("Failed to open EVDI device".to_string());
+            }
+
+            evdi_connect(
+                handle,
+                DEFAULT_EDID.as_ptr(),
+                DEFAULT_EDID.len() as u32,
+                0,
+            );
+
+            evdi_enable_cursor_events(handle, true);
+            handle
+        };
+
+        // Create driver instance
+        let mut driver = DisplayLinkDriver::new(device_id.clone(), evdi_handle, handle);
+
+        // Initialize USB device
+        driver.initialize_device()?;
+
+        println!("  ✓ Device initialized successfully");
+
+        // Spawn event loop thread
+        let device_id_clone = device_id.clone();
+        thread::spawn(move || {
+            if let Err(e) = driver.run() {
+                eprintln!("[{}] Driver error: {}", device_id_clone, e);
+            }
+        });
+
+        // Mark device as active
+        {
+            let mut drivers = self.drivers.lock().unwrap();
+            drivers.insert(device_id, DisplayLinkDriver::new(
+                "placeholder".to_string(),
+                ptr::null_mut(),
+                unsafe { std::mem::zeroed() }
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn scan_devices(&self) -> Result<(), String> {
+        let devices = self.context.devices()
+            .map_err(|e| format!("Failed to list devices: {}", e))?;
+
+        for device in devices.iter() {
+            if let Ok(desc) = device.device_descriptor() {
+                if desc.vendor_id() == DISPLAYLINK_VID && desc.product_id() == DISPLAYLINK_PID {
+                    if let Err(e) = self.initialize_device(device) {
+                        eprintln!("Failed to initialize device: {}", e);
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn run(&self) -> Result<(), String> {
+        println!("DisplayLink Manager running with hot-plug support");
+        println!("Monitoring for DisplayLink devices (VID: 0x{:04X}, PID: 0x{:04X})",
+            DISPLAYLINK_VID, DISPLAYLINK_PID);
+        println!("Press Ctrl+C to exit\n");
+
+        // Initial scan
+        self.scan_devices()?;
+
+        // Monitor for new devices periodically
+        loop {
+            thread::sleep(Duration::from_secs(2));
+            self.scan_devices()?;
+        }
+    }
+
+    fn device_count(&self) -> usize {
+        self.drivers.lock().unwrap().len()
+    }
+}
+
 fn main() {
-    println!("DisplayLink Rust Driver v0.1.0");
-    println!("========================================");
+    println!("DisplayLink Rust Driver v0.2.0 - Phase 6");
+    println!("=========================================");
+    println!("Features: Multi-monitor, Hot-plug, Power management");
+    println!();
 
     // Initialize EVDI library
     unsafe {
@@ -382,83 +596,17 @@ fn main() {
             version.version_major, version.version_minor, version.version_patchlevel);
     }
 
-    // Find and open DisplayLink USB device
+    // Initialize USB context and manager
     match rusb::Context::new() {
-        Ok(mut context) => {
-            println!("USB context initialized.");
+        Ok(context) => {
+            println!("USB context initialized.\n");
 
-            match find_displaylink_device(&mut context) {
-                Some((device, device_desc)) => {
-                    println!("DisplayLink device found!");
-                    println!("  Bus: {}, Address: {}",
-                        device.bus_number(), device.address());
-                    println!("  VID: 0x{:04X}, PID: 0x{:04X}",
-                        device_desc.vendor_id(), device_desc.product_id());
+            // Create DisplayLink manager
+            let manager = DisplayLinkManager::new(context);
 
-                    match device.open() {
-                        Ok(handle) => {
-                            println!("USB device opened successfully.");
-
-                            // Create or open EVDI device
-                            let evdi_handle = unsafe {
-                                // Add new EVDI device
-                                let card_no = evdi_add_device();
-                                if card_no < 0 {
-                                    eprintln!("Failed to add EVDI device");
-                                    return;
-                                }
-                                println!("Created EVDI device: /dev/dri/card{}", card_no);
-
-                                // Open the EVDI device
-                                let handle = evdi_open(card_no);
-                                if handle == EVDI_INVALID_HANDLE {
-                                    eprintln!("Failed to open EVDI device");
-                                    return;
-                                }
-
-                                // Connect with default EDID
-                                println!("Connecting to EVDI with default EDID...");
-                                evdi_connect(
-                                    handle,
-                                    DEFAULT_EDID.as_ptr(),
-                                    DEFAULT_EDID.len() as u32,
-                                    0, // No SKU area limit
-                                );
-
-                                // Enable cursor events
-                                evdi_enable_cursor_events(handle, true);
-
-                                handle
-                            };
-
-                            // Create driver instance
-                            let mut driver = DisplayLinkDriver::new(evdi_handle, handle);
-
-                            // Initialize USB device
-                            match driver.initialize_device() {
-                                Ok(_) => {
-                                    println!("DisplayLink device initialized successfully.");
-                                    println!("\nDriver is now running. Press Ctrl+C to exit.");
-
-                                    // Run main event loop
-                                    if let Err(e) = driver.run() {
-                                        eprintln!("Driver error: {}", e);
-                                    }
-                                }
-                                Err(e) => {
-                                    eprintln!("Failed to initialize device: {}", e);
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("Error opening device: {}", e);
-                        }
-                    }
-                }
-                None => {
-                    println!("DisplayLink device not found.");
-                    println!("Please ensure the StarTech USB35DOCK is connected.");
-                }
+            // Run manager with hot-plug support
+            if let Err(e) = manager.run() {
+                eprintln!("Manager error: {}", e);
             }
         }
         Err(e) => {
