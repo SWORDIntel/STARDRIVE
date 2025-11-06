@@ -103,14 +103,21 @@ impl DisplayMode {
 /// - Repeated pixel: [length as u8] [pixel value as RGB565]
 ///
 /// This implementation uses RGB565 format (16 bits per pixel)
+///
+/// Performance optimizations:
+/// - Pre-allocated buffer to reduce allocations
+/// - Buffer pooling for compression workspace
+/// - Efficient run-length detection
 pub struct RLECompressor {
     buffer: Vec<u8>,
+    work_buffer: Vec<u16>,  // Reusable work buffer for RGB565 conversion
 }
 
 impl RLECompressor {
     pub fn new() -> Self {
         RLECompressor {
-            buffer: Vec::with_capacity(DL_MAX_TRANSFER_SIZE),
+            buffer: Vec::with_capacity(DL_MAX_TRANSFER_SIZE * 4),
+            work_buffer: Vec::with_capacity(1920 * 1080),  // Pre-allocate for Full HD
         }
     }
 
