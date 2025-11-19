@@ -32,8 +32,8 @@ const DISPLAYLINK_PID: u16 = 0x4307;
 // USB interface and endpoint configuration
 const DISPLAY_INTERFACE: u8 = 0; // MI_00 from Windows driver analysis
 const NETWORK_INTERFACE: u8 = 5; // MI_05 from Windows driver analysis
-const BULK_OUT_ENDPOINT: u8 = 0x01;
-const BULK_IN_ENDPOINT: u8 = 0x81;
+const BULK_OUT_ENDPOINT: u8 = 0x02; // Corrected from actual device descriptor (0x02 OUT)
+const BULK_IN_ENDPOINT: u8 = 0x84;  // Corrected from actual device descriptor (0x84 IN)
 
 // Default EDID for a 1920x1080 display (256 bytes with CEA-861 extension)
 const DEFAULT_EDID: &[u8] = &[
@@ -168,32 +168,54 @@ impl DisplayLinkDriver {
     // Send initialization commands to DisplayLink device
     fn send_init_sequence(&mut self) -> Result<(), String> {
         println!("Initializing DisplayLink device...");
+
+        // Device needs significant time to be ready after claiming interface
+        // Increased to 1000ms (1 second) to allow firmware full initialization
+        vprintln!("  Waiting for device firmware to stabilize (1000ms)...");
+        std::thread::sleep(std::time::Duration::from_millis(1000));
+
         vprintln!("  DL-3000 series: testing bulk endpoint");
 
-        // For DL-3000, try sending a minimal test packet first
-        // This will tell us if bulk transfers work at all
-        let test_data = vec![0x00; 64]; // Simple 64-byte zero packet
-        vprintln!("  Sending test packet ({} bytes of zeros)", test_data.len());
-
-        match self.send_bulk_data(&test_data) {
-            Ok(_) => {
-                println!("  ✓ Bulk endpoint accepts data!");
-                // Now try a register write command
-                let blank_cmd = self.cmd_builder.blank_screen(true).to_vec();
-                vprintln!(
-                    "  Trying register write command ({} bytes)",
-                    blank_cmd.len()
-                );
-                self.send_bulk_data(&blank_cmd)?;
-                println!("  ✓ Register write succeeded");
+        // Try multiple times with increasing delays between attempts
+        // Device may need time to transition to bulk transfer mode
+        for attempt in 1..=5 {
+            // Increasing delay before each retry attempt
+            if attempt > 1 {
+                let delay_ms = attempt as u64 * 200; // 200ms, 400ms, 600ms, 800ms
+                vprintln!("    Retry attempt {}/5 (delay: {}ms)", attempt, delay_ms);
+                std::thread::sleep(std::time::Duration::from_millis(delay_ms));
             }
-            Err(e) => {
-                println!("  ✗ Bulk endpoint rejected test data: {}", e);
-                return Err(format!("Bulk endpoint test failed: {}", e));
+
+            // For DL-3000, try sending a minimal test packet first
+            // This will tell us if bulk transfers work at all
+            let test_data = vec![0x00; 64]; // Simple 64-byte zero packet
+            vprintln!("  Sending test packet ({} bytes of zeros) - Attempt {}/5", test_data.len(), attempt);
+
+            match self.send_bulk_data(&test_data) {
+                Ok(_) => {
+                    println!("  ✓ Bulk endpoint accepts data!");
+                    // Now try a register write command
+                    let blank_cmd = self.cmd_builder.blank_screen(true).to_vec();
+                    vprintln!(
+                        "  Trying register write command ({} bytes)",
+                        blank_cmd.len()
+                    );
+                    self.send_bulk_data(&blank_cmd)?;
+                    println!("  ✓ Register write succeeded");
+                    return Ok(());
+                }
+                Err(e) => {
+                    vprintln!("  ✗ Attempt {} failed: {}", attempt, e);
+                    if attempt == 5 {
+                        println!("  ✗ Bulk endpoint rejected test data after 5 attempts: {}", e);
+                        return Err(format!("Bulk endpoint test failed: {}", e));
+                    }
+                }
             }
         }
 
-        Ok(())
+        // Should not reach here, but return error just in case
+        Err("Failed to initialize bulk endpoint (unknown error)".to_string())
     }
 
     // Send framebuffer data to DisplayLink device
