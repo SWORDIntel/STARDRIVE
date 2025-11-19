@@ -1,0 +1,20 @@
+# DisplayLink USB Dock udev Rules
+# Allows non-root access to DisplayLink devices and EVDI virtual displays
+#
+# Installation: sudo cp 99-displaylink.rules /etc/udev/rules.d/
+# Reload:      sudo udevadm control --reload-rules && sudo udevadm trigger
+
+# StarTech USB35DOCK (VID: 17e9, PID: 4307)
+# Allows USB access without root
+SUBSYSTEM=="usb", ATTR{idVendor}=="17e9", ATTR{idProduct}=="4307", MODE="0666", GROUP="plugdev"
+
+# Generic DisplayLink devices (VID: 17e9)
+# Covers all DisplayLink USB devices
+SUBSYSTEM=="usb", ATTR{idVendor}=="17e9", MODE="0666", GROUP="plugdev"
+
+# EVDI virtual display devices (/dev/dri/cardX)
+# Allows DRM operations without root
+SUBSYSTEM=="drm", KERNEL=="card*", MODE="0666", GROUP="video"
+
+# USB monitor devices (for any USB-based monitors)
+SUBSYSTEM=="usb", ATTR{idVendor}=="17e9", RUN+="/usr/local/bin/displaylink-driver-udev-notify"

@@ -1,0 +1,26 @@
+[Unit]
+Description=DisplayLink USB Driver Service
+Documentation=https://github.com/SWORDIntel/stardrive
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/displaylink-driver
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/var/log/displaylink-driver.log
+StandardError=append:/var/log/displaylink-driver.log
+Environment="LD_LIBRARY_PATH=/usr/local/lib"
+Environment="DISPLAYLINK_DRIVER_VERBOSE=0"
+TimeoutStartSec=30
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log /dev/bus/usb /dev/dri
+
+[Install]
+WantedBy=multi-user.target
