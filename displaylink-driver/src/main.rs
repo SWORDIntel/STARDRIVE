@@ -8,12 +8,13 @@ mod displaylink_protocol;
 mod network_adapter;
 
 use rusb::{Device, DeviceDescriptor, DeviceHandle, UsbContext};
-use std::ptr;
+use std::collections::HashSet;
+use std::env;
 use std::ffi::c_void;
-use std::time::Duration;
-use std::sync::{Arc, Mutex};
+use std::ptr;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
-use std::collections::HashMap;
+use std::time::Duration;
 
 use displaylink_protocol::*;
 use network_adapter::NetworkAdapter;
@@ -34,19 +35,26 @@ const NETWORK_INTERFACE: u8 = 5; // MI_05 from Windows driver analysis
 const BULK_OUT_ENDPOINT: u8 = 0x01;
 const BULK_IN_ENDPOINT: u8 = 0x81;
 
-// Default EDID for a 1920x1080 display
+// Default EDID for a 1920x1080 display (256 bytes with CEA-861 extension)
 const DEFAULT_EDID: &[u8] = &[
-    0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x10, 0xAC, 0x4F, 0xA0,
-    0x4C, 0x50, 0x39, 0x30, 0x1E, 0x1D, 0x01, 0x04, 0xA5, 0x34, 0x20, 0x78,
-    0xFB, 0x6C, 0xE5, 0xA5, 0x55, 0x50, 0xA0, 0x23, 0x0B, 0x50, 0x54, 0xA5,
-    0x4B, 0x00, 0x81, 0x80, 0xA9, 0x40, 0xD1, 0x00, 0x71, 0x4F, 0x01, 0x01,
-    0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x02, 0x3A, 0x80, 0x18, 0x71, 0x38,
-    0x2D, 0x40, 0x58, 0x2C, 0x45, 0x00, 0x09, 0x25, 0x21, 0x00, 0x00, 0x1E,
-    0x00, 0x00, 0x00, 0xFF, 0x00, 0x48, 0x56, 0x4E, 0x44, 0x59, 0x30, 0x39,
-    0x50, 0x4C, 0x00, 0x0A, 0x20, 0x20, 0x00, 0x00, 0x00, 0xFC, 0x00, 0x44,
-    0x45, 0x4C, 0x4C, 0x20, 0x50, 0x32, 0x34, 0x31, 0x34, 0x48, 0x0A, 0x20,
-    0x00, 0x00, 0x00, 0xFD, 0x00, 0x38, 0x4C, 0x1E, 0x53, 0x11, 0x00, 0x0A,
-    0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x01, 0x08,
+    // Block 0: Base EDID (128 bytes)
+    0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x10, 0xAC, 0x4F, 0xA0, 0x4C, 0x50, 0x39, 0x30,
+    0x1E, 0x1D, 0x01, 0x04, 0xA5, 0x34, 0x20, 0x78, 0xFB, 0x6C, 0xE5, 0xA5, 0x55, 0x50, 0xA0, 0x23,
+    0x0B, 0x50, 0x54, 0xA5, 0x4B, 0x00, 0x81, 0x80, 0xA9, 0x40, 0xD1, 0x00, 0x71, 0x4F, 0x01, 0x01,
+    0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x02, 0x3A, 0x80, 0x18, 0x71, 0x38, 0x2D, 0x40, 0x58, 0x2C,
+    0x45, 0x00, 0x09, 0x25, 0x21, 0x00, 0x00, 0x1E, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x48, 0x56, 0x4E,
+    0x44, 0x59, 0x30, 0x39, 0x50, 0x4C, 0x00, 0x0A, 0x20, 0x20, 0x00, 0x00, 0x00, 0xFC, 0x00, 0x44,
+    0x45, 0x4C, 0x4C, 0x20, 0x50, 0x32, 0x34, 0x31, 0x34, 0x48, 0x0A, 0x20, 0x00, 0x00, 0x00, 0xFD,
+    0x00, 0x38, 0x4C, 0x1E, 0x53, 0x11, 0x00, 0x0A, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x01, 0x9B,
+    // Block 1: CEA-861 Extension Block (128 bytes)
+    0x02, 0x03, 0x1D, 0xF1, 0x4B, 0x90, 0x05, 0x04, 0x03, 0x02, 0x07, 0x16, 0x01, 0x06, 0x11, 0x12,
+    0x15, 0x13, 0x14, 0x1F, 0x20, 0x23, 0x09, 0x07, 0x07, 0x83, 0x01, 0x00, 0x00, 0x65, 0x03, 0x0C,
+    0x00, 0x10, 0x00, 0x02, 0x3A, 0x80, 0x18, 0x71, 0x38, 0x2D, 0x40, 0x58, 0x2C, 0x45, 0x00, 0x09,
+    0x25, 0x21, 0x00, 0x00, 0x1E, 0x01, 0x1D, 0x80, 0x18, 0x71, 0x1C, 0x16, 0x20, 0x58, 0x2C, 0x25,
+    0x00, 0x09, 0x25, 0x21, 0x00, 0x00, 0x9E, 0x01, 0x1D, 0x00, 0x72, 0x51, 0xD0, 0x1E, 0x20, 0x6E,
+    0x28, 0x55, 0x00, 0x09, 0x25, 0x21, 0x00, 0x00, 0x1E, 0x8C, 0x0A, 0xD0, 0x8A, 0x20, 0xE0, 0x2D,
+    0x10, 0x10, 0x3E, 0x96, 0x00, 0x09, 0x25, 0x21, 0x00, 0x00, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x12,
 ];
 
 // Wrapper to make evdi_handle Send (EVDI is thread-safe in practice)
@@ -55,8 +63,22 @@ unsafe impl Send for SendEvdiHandle {}
 unsafe impl Sync for SendEvdiHandle {}
 
 // Multi-monitor manager with hot-plug support
+static VERBOSE_LOG: OnceLock<bool> = OnceLock::new();
+
+fn verbose_enabled() -> bool {
+    *VERBOSE_LOG.get_or_init(|| env::var("DISPLAYLINK_DRIVER_VERBOSE").is_ok())
+}
+
+macro_rules! vprintln {
+    ($($arg:tt)*) => {
+        if verbose_enabled() {
+            println!($($arg)*);
+        }
+    };
+}
+
 struct DisplayLinkManager {
-    drivers: Arc<Mutex<HashMap<String, DisplayLinkDriver>>>,
+    drivers: Arc<Mutex<HashSet<String>>>,
     context: Arc<rusb::Context>,
 }
 
@@ -82,7 +104,11 @@ struct FrameBuffer {
 }
 
 impl DisplayLinkDriver {
-    fn new(device_id: String, evdi_handle: evdi_handle, usb_handle: DeviceHandle<rusb::Context>) -> Self {
+    fn new(
+        device_id: String,
+        evdi_handle: evdi_handle,
+        usb_handle: DeviceHandle<rusb::Context>,
+    ) -> Self {
         let usb_handle_arc = Arc::new(Mutex::new(usb_handle));
 
         // Initialize network adapter
@@ -109,8 +135,12 @@ impl DisplayLinkDriver {
             // Detach kernel driver if active (Linux only)
             match handle.kernel_driver_active(DISPLAY_INTERFACE) {
                 Ok(true) => {
-                    println!("Detaching kernel driver from interface {}", DISPLAY_INTERFACE);
-                    handle.detach_kernel_driver(DISPLAY_INTERFACE)
+                    println!(
+                        "Detaching kernel driver from interface {}",
+                        DISPLAY_INTERFACE
+                    );
+                    handle
+                        .detach_kernel_driver(DISPLAY_INTERFACE)
                         .map_err(|e| format!("Failed to detach kernel driver: {}", e))?;
                 }
                 Ok(false) => println!("No kernel driver attached"),
@@ -119,9 +149,10 @@ impl DisplayLinkDriver {
 
             // Claim the display interface
             println!("Claiming interface {}", DISPLAY_INTERFACE);
-            handle.claim_interface(DISPLAY_INTERFACE)
+            handle
+                .claim_interface(DISPLAY_INTERFACE)
                 .map_err(|e| format!("Failed to claim interface: {}", e))?;
-        }  // Drop handle lock here
+        } // Drop handle lock here
 
         // Initialize network adapter (non-fatal if fails)
         if let Some(ref mut net_adapter) = self.network_adapter {
@@ -136,53 +167,59 @@ impl DisplayLinkDriver {
 
     // Send initialization commands to DisplayLink device
     fn send_init_sequence(&mut self) -> Result<(), String> {
-        let handle = self.usb_handle.lock().unwrap();
-
         println!("Initializing DisplayLink device...");
+        vprintln!("  DL-3000 series: testing bulk endpoint");
 
-        // Initialize DisplayLink channel
-        let request_type = USB_DIR_OUT | USB_TYPE_VENDOR | USB_RECIP_DEVICE;
-        handle.write_control(
-            request_type,
-            DL_USB_REQUEST_CHANNEL,
-            DL_CHAN_CMD_INIT,
-            0,
-            &[],
-            CONTROL_TIMEOUT,
-        ).map_err(|e| format!("Channel init failed: {}", e))?;
+        // For DL-3000, try sending a minimal test packet first
+        // This will tell us if bulk transfers work at all
+        let test_data = vec![0x00; 64]; // Simple 64-byte zero packet
+        vprintln!("  Sending test packet ({} bytes of zeros)", test_data.len());
 
-        println!("  ✓ Channel initialized");
-
-        // Blank the screen initially
-        let blank_cmd = self.cmd_builder.blank_screen(true).to_vec();
-        drop(handle);  // Release lock before send_bulk_data
-        self.send_bulk_data(&blank_cmd)?;
-
-        println!("  ✓ Screen blanked");
+        match self.send_bulk_data(&test_data) {
+            Ok(_) => {
+                println!("  ✓ Bulk endpoint accepts data!");
+                // Now try a register write command
+                let blank_cmd = self.cmd_builder.blank_screen(true).to_vec();
+                vprintln!(
+                    "  Trying register write command ({} bytes)",
+                    blank_cmd.len()
+                );
+                self.send_bulk_data(&blank_cmd)?;
+                println!("  ✓ Register write succeeded");
+            }
+            Err(e) => {
+                println!("  ✗ Bulk endpoint rejected test data: {}", e);
+                return Err(format!("Bulk endpoint test failed: {}", e));
+            }
+        }
 
         Ok(())
     }
 
     // Send framebuffer data to DisplayLink device
     fn send_framebuffer(&mut self, buffer: &FrameBuffer) -> Result<(), String> {
-        println!("Compressing framebuffer: {}x{}", buffer.width, buffer.height);
+        println!(
+            "Compressing framebuffer: {}x{}",
+            buffer.width, buffer.height
+        );
 
         // Compress framebuffer using RLE
-        let compressed = self.compressor.compress(
-            &buffer.data,
-            buffer.width as usize,
-            buffer.height as usize,
-        ).to_vec();
+        let compressed = self
+            .compressor
+            .compress(&buffer.data, buffer.width as usize, buffer.height as usize)
+            .to_vec();
 
-        println!("  Compressed {} bytes -> {} bytes",
-            buffer.data.len(), compressed.len());
+        println!(
+            "  Compressed {} bytes -> {} bytes",
+            buffer.data.len(),
+            compressed.len()
+        );
 
         // Set damage rectangle (full screen update)
-        let damage_cmd = self.cmd_builder.damage_rect(
-            0, 0,
-            buffer.width as u16,
-            buffer.height as u16,
-        ).to_vec();
+        let damage_cmd = self
+            .cmd_builder
+            .damage_rect(0, 0, buffer.width as u16, buffer.height as u16)
+            .to_vec();
         self.send_bulk_data(&damage_cmd)?;
 
         // Send compressed framebuffer data in chunks
@@ -199,8 +236,10 @@ impl DisplayLinkDriver {
 
     // Send mode set command to DisplayLink device
     fn send_mode_set(&mut self, mode: &DisplayMode) -> Result<(), String> {
-        println!("Setting display mode: {}x{}@{}Hz",
-            mode.width, mode.height, mode.refresh_rate);
+        println!(
+            "Setting display mode: {}x{}@{}Hz",
+            mode.width, mode.height, mode.refresh_rate
+        );
 
         let mode_cmd = self.cmd_builder.set_mode(mode).to_vec();
         self.send_bulk_data(&mode_cmd)?;
@@ -220,11 +259,9 @@ impl DisplayLinkDriver {
 
         // Split into chunks if necessary
         for chunk in data.chunks(DL_MAX_TRANSFER_SIZE) {
-            handle.write_bulk(
-                BULK_OUT_ENDPOINT,
-                chunk,
-                BULK_TIMEOUT,
-            ).map_err(|e| format!("Bulk transfer failed: {}", e))?;
+            handle
+                .write_bulk(BULK_OUT_ENDPOINT, chunk, BULK_TIMEOUT)
+                .map_err(|e| format!("Bulk transfer failed: {}", e))?;
         }
 
         Ok(())
@@ -268,7 +305,8 @@ impl DisplayLinkDriver {
     fn handle_events(&mut self) {
         unsafe extern "C" fn dpms_handler(dpms_mode: i32, user_data: *mut c_void) {
             let driver = &mut *(user_data as *mut DisplayLinkDriver);
-            println!("[{}] DPMS mode changed: {} ({})",
+            println!(
+                "[{}] DPMS mode changed: {} ({})",
                 driver.device_id,
                 dpms_mode,
                 match dpms_mode {
@@ -281,7 +319,7 @@ impl DisplayLinkDriver {
             );
 
             // Blank or unblank screen based on DPMS mode
-            let should_blank = dpms_mode != 0;  // Blank for all modes except ON
+            let should_blank = dpms_mode != 0; // Blank for all modes except ON
             let blank_cmd = driver.cmd_builder.blank_screen(should_blank).to_vec();
 
             if let Err(e) = driver.send_bulk_data(&blank_cmd) {
@@ -291,29 +329,59 @@ impl DisplayLinkDriver {
 
         unsafe extern "C" fn mode_changed_handler(mode: evdi_mode, user_data: *mut c_void) {
             let driver = &mut *(user_data as *mut DisplayLinkDriver);
-            println!("[{}] Mode changed: {}x{}@{}Hz (dynamic resolution)",
-                driver.device_id, mode.width, mode.height, mode.refresh_rate);
+            println!(
+                "[{}] Mode changed: {}x{}@{}Hz (dynamic resolution)",
+                driver.device_id, mode.width, mode.height, mode.refresh_rate
+            );
             driver.current_mode = Some(mode);
 
             // Calculate timing parameters based on resolution
             let (pixel_clock, hsync_start, hsync_end, htotal, vsync_start, vsync_end, vtotal) =
                 match (mode.width, mode.height) {
-                    (1920, 1080) => (148500, 1920 + 88, 1920 + 88 + 44, 2200, 1080 + 4, 1080 + 4 + 5, 1125),
-                    (1280, 720) => (74250, 1280 + 110, 1280 + 110 + 40, 1650, 720 + 5, 720 + 5 + 5, 750),
-                    (1024, 768) => (65000, 1024 + 24, 1024 + 24 + 136, 1344, 768 + 3, 768 + 3 + 6, 806),
+                    (1920, 1080) => (
+                        148500,
+                        1920 + 88,
+                        1920 + 88 + 44,
+                        2200,
+                        1080 + 4,
+                        1080 + 4 + 5,
+                        1125,
+                    ),
+                    (1280, 720) => (
+                        74250,
+                        1280 + 110,
+                        1280 + 110 + 40,
+                        1650,
+                        720 + 5,
+                        720 + 5 + 5,
+                        750,
+                    ),
+                    (1024, 768) => (
+                        65000,
+                        1024 + 24,
+                        1024 + 24 + 136,
+                        1344,
+                        768 + 3,
+                        768 + 3 + 6,
+                        806,
+                    ),
                     _ => {
                         // Generic timing for other resolutions
                         let h_blank = (mode.width / 5) as u32;
                         let v_blank = (mode.height / 30) as u32;
-                        let pixel_clock = (mode.width as u32 + h_blank) * (mode.height as u32 + v_blank) *
-                                         mode.refresh_rate as u32 / 1000;
-                        (pixel_clock,
-                         mode.width as u32 + h_blank / 2,
-                         mode.width as u32 + h_blank / 2 + h_blank / 10,
-                         mode.width as u32 + h_blank,
-                         mode.height as u32 + v_blank / 2,
-                         mode.height as u32 + v_blank / 2 + v_blank / 10,
-                         mode.height as u32 + v_blank)
+                        let pixel_clock = (mode.width as u32 + h_blank)
+                            * (mode.height as u32 + v_blank)
+                            * mode.refresh_rate as u32
+                            / 1000;
+                        (
+                            pixel_clock,
+                            mode.width as u32 + h_blank / 2,
+                            mode.width as u32 + h_blank / 2 + h_blank / 10,
+                            mode.width as u32 + h_blank,
+                            mode.height as u32 + v_blank / 2,
+                            mode.height as u32 + v_blank / 2 + v_blank / 10,
+                            mode.height as u32 + v_blank,
+                        )
                     }
                 };
 
@@ -333,7 +401,10 @@ impl DisplayLinkDriver {
 
             // Send mode to DisplayLink device
             if let Err(e) = driver.send_mode_set(&dl_mode) {
-                eprintln!("[{}] Failed to set DisplayLink mode: {}", driver.device_id, e);
+                eprintln!(
+                    "[{}] Failed to set DisplayLink mode: {}",
+                    driver.device_id, e
+                );
                 return;
             }
 
@@ -373,12 +444,17 @@ impl DisplayLinkDriver {
         }
 
         unsafe extern "C" fn cursor_set_handler(cursor: evdi_cursor_set, _user_data: *mut c_void) {
-            println!("Cursor set: {}x{} at ({}, {})",
-                cursor.width, cursor.height, cursor.hot_x, cursor.hot_y);
+            println!(
+                "Cursor set: {}x{} at ({}, {})",
+                cursor.width, cursor.height, cursor.hot_x, cursor.hot_y
+            );
             // Handle cursor updates
         }
 
-        unsafe extern "C" fn cursor_move_handler(cursor: evdi_cursor_move, _user_data: *mut c_void) {
+        unsafe extern "C" fn cursor_move_handler(
+            cursor: evdi_cursor_move,
+            _user_data: *mut c_void,
+        ) {
             println!("Cursor moved to ({}, {})", cursor.x, cursor.y);
         }
 
@@ -404,7 +480,10 @@ impl DisplayLinkDriver {
 
     // Main event loop
     fn run(&mut self) -> Result<(), String> {
-        println!("[{}] Starting DisplayLink driver event loop...", self.device_id);
+        println!(
+            "[{}] Starting DisplayLink driver event loop...",
+            self.device_id
+        );
 
         loop {
             // Check if we should continue running
@@ -456,16 +535,18 @@ impl Drop for DisplayLinkDriver {
 impl DisplayLinkManager {
     fn new(context: rusb::Context) -> Self {
         DisplayLinkManager {
-            drivers: Arc::new(Mutex::new(HashMap::new())),
+            drivers: Arc::new(Mutex::new(HashSet::new())),
             context: Arc::new(context),
         }
     }
 
     fn initialize_device(&self, device: Device<rusb::Context>) -> Result<(), String> {
-        let device_desc = device.device_descriptor()
+        let device_desc = device
+            .device_descriptor()
             .map_err(|e| format!("Failed to get device descriptor: {}", e))?;
 
-        if device_desc.vendor_id() != DISPLAYLINK_VID || device_desc.product_id() != DISPLAYLINK_PID {
+        if device_desc.vendor_id() != DISPLAYLINK_VID || device_desc.product_id() != DISPLAYLINK_PID
+        {
             return Err("Not a DisplayLink device".to_string());
         }
 
@@ -474,17 +555,32 @@ impl DisplayLinkManager {
         // Check if already initialized
         {
             let drivers = self.drivers.lock().unwrap();
-            if drivers.contains_key(&device_id) {
+            if drivers.contains(&device_id) {
                 return Ok(());
             }
         }
 
         println!("Initializing DisplayLink device: {}", device_id);
-        println!("  Bus: {}, Address: {}", device.bus_number(), device.address());
-        println!("  VID: 0x{:04X}, PID: 0x{:04X}",
-            device_desc.vendor_id(), device_desc.product_id());
+        vprintln!(
+            "  Device descriptor: bus {} addr {} (VID:PID {:04X}:{:04X})",
+            device.bus_number(),
+            device.address(),
+            device_desc.vendor_id(),
+            device_desc.product_id()
+        );
+        println!(
+            "  Bus: {}, Address: {}",
+            device.bus_number(),
+            device.address()
+        );
+        println!(
+            "  VID: 0x{:04X}, PID: 0x{:04X}",
+            device_desc.vendor_id(),
+            device_desc.product_id()
+        );
 
-        let handle = device.open()
+        let handle = device
+            .open()
             .map_err(|e| format!("Failed to open device: {}", e))?;
 
         // Create EVDI device
@@ -500,12 +596,7 @@ impl DisplayLinkManager {
                 return Err("Failed to open EVDI device".to_string());
             }
 
-            evdi_connect(
-                handle,
-                DEFAULT_EDID.as_ptr(),
-                DEFAULT_EDID.len() as u32,
-                0,
-            );
+            evdi_connect(handle, DEFAULT_EDID.as_ptr(), DEFAULT_EDID.len() as u32, 0);
 
             evdi_enable_cursor_events(handle, true);
             handle
@@ -530,18 +621,16 @@ impl DisplayLinkManager {
         // Mark device as active
         {
             let mut drivers = self.drivers.lock().unwrap();
-            drivers.insert(device_id, DisplayLinkDriver::new(
-                "placeholder".to_string(),
-                ptr::null_mut(),
-                unsafe { std::mem::zeroed() }
-            ));
+            drivers.insert(device_id);
         }
 
         Ok(())
     }
 
     fn scan_devices(&self) -> Result<(), String> {
-        let devices = self.context.devices()
+        let devices = self
+            .context
+            .devices()
             .map_err(|e| format!("Failed to list devices: {}", e))?;
 
         for device in devices.iter() {
@@ -559,8 +648,11 @@ impl DisplayLinkManager {
 
     fn run(&self) -> Result<(), String> {
         println!("DisplayLink Manager running with hot-plug support");
-        println!("Monitoring for DisplayLink devices (VID: 0x{:04X}, PID: 0x{:04X})",
-            DISPLAYLINK_VID, DISPLAYLINK_PID);
+        vprintln!("  Starting hot-plug scan loop");
+        println!(
+            "Monitoring for DisplayLink devices (VID: 0x{:04X}, PID: 0x{:04X})",
+            DISPLAYLINK_VID, DISPLAYLINK_PID
+        );
         println!("Press Ctrl+C to exit\n");
 
         // Initial scan
@@ -569,6 +661,7 @@ impl DisplayLinkManager {
         // Monitor for new devices periodically
         loop {
             thread::sleep(Duration::from_secs(2));
+            vprintln!("  Sleeping before next hot-plug poll");
             self.scan_devices()?;
         }
     }
@@ -592,8 +685,10 @@ fn main() {
             version_patchlevel: 0,
         };
         evdi_get_lib_version(&mut version);
-        println!("EVDI library version: {}.{}.{}",
-            version.version_major, version.version_minor, version.version_patchlevel);
+        println!(
+            "EVDI library version: {}.{}.{}",
+            version.version_major, version.version_minor, version.version_patchlevel
+        );
     }
 
     // Initialize USB context and manager

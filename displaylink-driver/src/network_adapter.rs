@@ -34,14 +34,18 @@ impl NetworkAdapter {
     pub fn initialize(&mut self) -> Result<(), String> {
         let handle = self.usb_handle.lock().unwrap();
 
-        println!("[{}] Initializing network adapter (interface {})",
-            self.device_id, NETWORK_INTERFACE);
+        println!(
+            "[{}] Initializing network adapter (interface {})",
+            self.device_id, NETWORK_INTERFACE
+        );
 
         // Check if kernel driver is active
         match handle.kernel_driver_active(NETWORK_INTERFACE) {
             Ok(true) => {
-                println!("[{}] Kernel network driver is active (CDC NCM)",
-                    self.device_id);
+                println!(
+                    "[{}] Kernel network driver is active (CDC NCM)",
+                    self.device_id
+                );
                 // Don't detach - let kernel handle network interface
                 return Ok(());
             }
@@ -49,8 +53,10 @@ impl NetworkAdapter {
                 println!("[{}] No kernel network driver attached", self.device_id);
             }
             Err(e) => {
-                println!("[{}] Cannot check network driver status: {}",
-                    self.device_id, e);
+                println!(
+                    "[{}] Cannot check network driver status: {}",
+                    self.device_id, e
+                );
             }
         }
 
@@ -63,8 +69,10 @@ impl NetworkAdapter {
             }
             Err(e) => {
                 // Don't fail if we can't claim - display still works
-                println!("[{}] Network interface not available: {}",
-                    self.device_id, e);
+                println!(
+                    "[{}] Network interface not available: {}",
+                    self.device_id, e
+                );
                 Ok(())
             }
         }

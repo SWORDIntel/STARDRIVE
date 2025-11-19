@@ -20,16 +20,16 @@ pub const DL_USB_REQUEST_READ_REG: u8 = 0x02;
 pub const DL_USB_REQUEST_CHANNEL: u8 = 0x12;
 
 /// DisplayLink register addresses
-pub const DL_REG_SYNC: u16 = 0xFF00;  // Sync register
-pub const DL_REG_BLANK: u16 = 0x1F00;  // Blank screen register
+pub const DL_REG_SYNC: u16 = 0xFF00; // Sync register
+pub const DL_REG_BLANK: u16 = 0x1F00; // Blank screen register
 
 /// DisplayLink channel commands
 pub const DL_CHAN_CMD_INIT: u16 = 0x0000;
 pub const DL_CHAN_CMD_BLANK: u16 = 0x00FF;
 
 /// Bulk transfer constants
-pub const DL_BULK_HEADER_SIZE: usize = 0;  // No header for basic transfers
-pub const DL_MAX_TRANSFER_SIZE: usize = 16384;  // 16KB max per transfer
+pub const DL_BULK_HEADER_SIZE: usize = 0; // No header for basic transfers
+pub const DL_MAX_TRANSFER_SIZE: usize = 16384; // 16KB max per transfer
 
 /// Display mode configuration
 #[derive(Debug, Clone, Copy)]
@@ -53,7 +53,7 @@ impl DisplayMode {
             width: 1920,
             height: 1080,
             refresh_rate: 60,
-            pixel_clock: 148500,  // kHz
+            pixel_clock: 148500, // kHz
             hsync_start: 1920 + 88,
             hsync_end: 1920 + 88 + 44,
             htotal: 2200,
@@ -69,7 +69,7 @@ impl DisplayMode {
             width: 1280,
             height: 720,
             refresh_rate: 60,
-            pixel_clock: 74250,  // kHz
+            pixel_clock: 74250, // kHz
             hsync_start: 1280 + 110,
             hsync_end: 1280 + 110 + 40,
             htotal: 1650,
@@ -85,7 +85,7 @@ impl DisplayMode {
             width: 1024,
             height: 768,
             refresh_rate: 60,
-            pixel_clock: 65000,  // kHz
+            pixel_clock: 65000, // kHz
             hsync_start: 1024 + 24,
             hsync_end: 1024 + 24 + 136,
             htotal: 1344,
@@ -110,14 +110,14 @@ impl DisplayMode {
 /// - Efficient run-length detection
 pub struct RLECompressor {
     buffer: Vec<u8>,
-    work_buffer: Vec<u16>,  // Reusable work buffer for RGB565 conversion
+    work_buffer: Vec<u16>, // Reusable work buffer for RGB565 conversion
 }
 
 impl RLECompressor {
     pub fn new() -> Self {
         RLECompressor {
             buffer: Vec::with_capacity(DL_MAX_TRANSFER_SIZE * 4),
-            work_buffer: Vec::with_capacity(1920 * 1080),  // Pre-allocate for Full HD
+            work_buffer: Vec::with_capacity(1920 * 1080), // Pre-allocate for Full HD
         }
     }
 
@@ -132,7 +132,7 @@ impl RLECompressor {
         let mut i = 0;
 
         while i < pixels {
-            let offset = i * 4;  // 4 bytes per pixel (BGRA)
+            let offset = i * 4; // 4 bytes per pixel (BGRA)
 
             if offset + 3 >= framebuffer.len() {
                 break;
@@ -174,8 +174,8 @@ impl RLECompressor {
                 i += run_length;
             } else {
                 // Single pixel (raw run)
-                self.buffer.push(0xAF);  // Raw run marker
-                self.buffer.push(0x00);  // Length - 1 (0 = 1 pixel)
+                self.buffer.push(0xAF); // Raw run marker
+                self.buffer.push(0x00); // Length - 1 (0 = 1 pixel)
                 self.buffer.extend_from_slice(&pixel.to_le_bytes());
                 i += 1;
             }
@@ -315,17 +315,15 @@ mod tests {
 
         // Create a simple test framebuffer: 4 red pixels
         let framebuffer: Vec<u8> = vec![
-            0, 0, 255, 255,  // Red pixel (BGRA)
-            0, 0, 255, 255,
-            0, 0, 255, 255,
-            0, 0, 255, 255,
+            0, 0, 255, 255, // Red pixel (BGRA)
+            0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255,
         ];
 
         let compressed = compressor.compress(&framebuffer, 2, 2);
 
         // Should compress to: [4, 0x00, 0xF8] (4 pixels, RGB565 red = 0xF800)
         assert!(!compressed.is_empty());
-        assert_eq!(compressed[0], 4);  // Run length
+        assert_eq!(compressed[0], 4); // Run length
     }
 
     #[test]

@@ -2,29 +2,21 @@ use std::env;
 use std::path::PathBuf;
 
 fn main() {
-    // Tell cargo to look for shared libraries in the specified path
-    println!("cargo:rustc-link-search=/home/user/STARDRIVE/evdi_source/library");
-    // Tell cargo to link the `evdi` library
-    println!("cargo:rustc-link-lib=evdi");
+    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    let evdi_root = manifest_dir.join("..").join("evdi_source");
+    let library_dir = evdi_root.join("library");
+    let header_path = library_dir.join("evdi_lib.h");
 
-    // Tell cargo to invalidate the built crate whenever the wrapper changes
+    println!("cargo:rustc-link-search={}", library_dir.display());
+    println!("cargo:rustc-link-lib=evdi");
     println!("cargo:rerun-if-changed=wrapper.h");
 
-    // The bindgen::Builder is the main entry point
-    // to bindgen, and lets you build up options for
-    // the resulting bindings.
     let bindings = bindgen::Builder::default()
-        // The input header we would like to generate bindings for.
-        .header("/home/user/STARDRIVE/evdi_source/library/evdi_lib.h")
-        // Tell cargo to invalidate the built crate whenever any of the
-        // included header files changed.
+        .header(header_path.to_string_lossy())
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
-        // Finish the builder and generate the bindings.
         .generate()
-        // Unwrap the Result and panic on failure.
         .expect("Unable to generate bindings");
 
-    // Write the bindings to the $OUT_DIR/bindings.rs file.
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     bindings
         .write_to_file(out_path.join("bindings.rs"))

@@ -3,8 +3,8 @@
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
     use rusb::UsbContext;
+    use std::time::Duration;
 
     // Test constants
     const TEST_VID: u16 = 0x17e9;
@@ -33,10 +33,7 @@ mod tests {
                     })
                     .collect();
 
-                println!(
-                    "Found {} DisplayLink device(s)",
-                    displaylink_devices.len()
-                );
+                println!("Found {} DisplayLink device(s)", displaylink_devices.len());
             }
         }
     }
@@ -45,9 +42,9 @@ mod tests {
     fn test_mode_configurations() {
         // Test standard display mode constants
         // Standard resolutions
-        assert_eq!(1920 * 1080, 2_073_600);  // Full HD pixels
-        assert_eq!(1280 * 720, 921_600);     // HD pixels
-        assert_eq!(1024 * 768, 786_432);     // XGA pixels
+        assert_eq!(1920 * 1080, 2_073_600); // Full HD pixels
+        assert_eq!(1280 * 720, 921_600); // HD pixels
+        assert_eq!(1024 * 768, 786_432); // XGA pixels
     }
 
     #[test]
@@ -56,11 +53,13 @@ mod tests {
         // RLE compresses repeated pixels efficiently
 
         // 4 identical pixels should compress to a single run
-        let repeated_pixel_size = 3;  // [count, pixel_low, pixel_high]
-        let original_size = 4 * 4;     // 4 pixels * 4 bytes (BGRA)
+        let repeated_pixel_size = 3; // [count, pixel_low, pixel_high]
+        let original_size = 4 * 4; // 4 pixels * 4 bytes (BGRA)
 
-        assert!(repeated_pixel_size < original_size,
-            "RLE should compress repeated pixels");
+        assert!(
+            repeated_pixel_size < original_size,
+            "RLE should compress repeated pixels"
+        );
     }
 
     #[test]
@@ -68,19 +67,19 @@ mod tests {
         // Test BGRA32 to RGB565 conversion math
         // Red (255, 0, 0) in RGB
         let r8 = 255u8;
-        let r5 = (r8 >> 3) as u16;  // 5 bits
+        let r5 = (r8 >> 3) as u16; // 5 bits
         let rgb565_red = r5 << 11;
         assert_eq!(rgb565_red, 0xF800, "Red conversion");
 
         // Green (0, 255, 0) in RGB
         let g8 = 255u8;
-        let g6 = (g8 >> 2) as u16;  // 6 bits
+        let g6 = (g8 >> 2) as u16; // 6 bits
         let rgb565_green = g6 << 5;
         assert_eq!(rgb565_green, 0x07E0, "Green conversion");
 
         // Blue (0, 0, 255) in RGB
         let b8 = 255u8;
-        let b5 = (b8 >> 3) as u16;  // 5 bits
+        let b5 = (b8 >> 3) as u16; // 5 bits
         assert_eq!(b5, 0x001F, "Blue conversion");
     }
 
@@ -155,11 +154,11 @@ mod tests {
     fn test_performance_calculations() {
         // Test buffer size calculations for performance
         // Full HD buffer size
-        let buffer_size = 1920 * 1080 * 4;  // BGRA
+        let buffer_size = 1920 * 1080 * 4; // BGRA
         assert_eq!(buffer_size, 8_294_400, "Full HD buffer size");
 
         // Max USB transfer size
-        let max_transfer = 16384;  // 16KB
+        let max_transfer = 16384; // 16KB
         let chunks = (buffer_size + max_transfer - 1) / max_transfer;
         assert!(chunks > 500, "Should need multiple chunks for Full HD");
     }
