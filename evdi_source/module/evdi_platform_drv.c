@@ -26,7 +26,7 @@ MODULE_AUTHOR("DisplayLink (UK) Ltd.");
 MODULE_DESCRIPTION("Extensible Virtual Display Interface");
 MODULE_LICENSE("GPL");
 
-#define EVDI_DEVICE_COUNT_MAX 16
+#define EVDI_DEVICE_COUNT_MAX 64
 
 static struct evdi_platform_drv_context {
 	struct device *root_dev;

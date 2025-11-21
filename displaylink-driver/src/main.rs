@@ -33,7 +33,7 @@ const DISPLAYLINK_PID: u16 = 0x4307;
 const DISPLAY_INTERFACE: u8 = 0; // MI_00 from Windows driver analysis
 const NETWORK_INTERFACE: u8 = 5; // MI_05 from Windows driver analysis
 const BULK_OUT_ENDPOINT: u8 = 0x02; // Corrected from actual device descriptor (0x02 OUT)
-const BULK_IN_ENDPOINT: u8 = 0x84;  // Corrected from actual device descriptor (0x84 IN)
+const BULK_IN_ENDPOINT: u8 = 0x84; // Corrected from actual device descriptor (0x84 IN)
 
 // Default EDID for a 1920x1080 display (256 bytes with CEA-861 extension)
 const DEFAULT_EDID: &[u8] = &[
@@ -189,7 +189,11 @@ impl DisplayLinkDriver {
             // For DL-3000, try sending a minimal test packet first
             // This will tell us if bulk transfers work at all
             let test_data = vec![0x00; 64]; // Simple 64-byte zero packet
-            vprintln!("  Sending test packet ({} bytes of zeros) - Attempt {}/5", test_data.len(), attempt);
+            vprintln!(
+                "  Sending test packet ({} bytes of zeros) - Attempt {}/5",
+                test_data.len(),
+                attempt
+            );
 
             match self.send_bulk_data(&test_data) {
                 Ok(_) => {
@@ -207,7 +211,10 @@ impl DisplayLinkDriver {
                 Err(e) => {
                     vprintln!("  ✗ Attempt {} failed: {}", attempt, e);
                     if attempt == 5 {
-                        println!("  ✗ Bulk endpoint rejected test data after 5 attempts: {}", e);
+                        println!(
+                            "  ✗ Bulk endpoint rejected test data after 5 attempts: {}",
+                            e
+                        );
                         return Err(format!("Bulk endpoint test failed: {}", e));
                     }
                 }
@@ -340,12 +347,26 @@ impl DisplayLinkDriver {
                 }
             );
 
-            // Blank or unblank screen based on DPMS mode
-            let should_blank = dpms_mode != 0; // Blank for all modes except ON
-            let blank_cmd = driver.cmd_builder.blank_screen(should_blank).to_vec();
+            if dpms_mode == 0 { // ON
+                // Connect the virtual display
+                println!("[{}] DPMS ON: Connecting virtual display", driver.device_id);
+                evdi_connect(driver.evdi_handle.0, DEFAULT_EDID.as_ptr(), DEFAULT_EDID.len() as u32, 0);
 
-            if let Err(e) = driver.send_bulk_data(&blank_cmd) {
-                eprintln!("[{}] Failed to set DPMS mode: {}", driver.device_id, e);
+                // Unblank the screen
+                let blank_cmd = driver.cmd_builder.blank_screen(false).to_vec();
+                if let Err(e) = driver.send_bulk_data(&blank_cmd) {
+                    eprintln!("[{}] Failed to unblank screen: {}", driver.device_id, e);
+                }
+            } else { // STANDBY, SUSPEND, or OFF
+                // Blank the screen first
+                println!("[{}] DPMS OFF/Standby: Blanking screen and disconnecting virtual display", driver.device_id);
+                let blank_cmd = driver.cmd_builder.blank_screen(true).to_vec();
+                if let Err(e) = driver.send_bulk_data(&blank_cmd) {
+                    eprintln!("[{}] Failed to blank screen: {}", driver.device_id, e);
+                }
+
+                // Disconnect the virtual display
+                evdi_disconnect(driver.evdi_handle.0);
             }
         }
 
@@ -618,7 +639,7 @@ impl DisplayLinkManager {
                 return Err("Failed to open EVDI device".to_string());
             }
 
-            evdi_connect(handle, DEFAULT_EDID.as_ptr(), DEFAULT_EDID.len() as u32, 0);
+            // evdi_connect(handle, DEFAULT_EDID.as_ptr(), DEFAULT_EDID.len() as u32, 0);
 
             evdi_enable_cursor_events(handle, true);
             handle

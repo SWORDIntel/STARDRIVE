@@ -33,7 +33,6 @@ while [[ $# -gt 0 ]]; do
     --skip-driver) SKIP_DRIVER=true ;;
     --skip-install) SKIP_INSTALL=true ;;
     --skip-activate) SKIP_ACTIVATE=true ;;
-    --help) usage; exit 0 ;;
     *)
       echo "Unknown option: $1" >&2
       usage
@@ -251,7 +250,7 @@ build_module() {
   apply_udev_workaround
   unbind_displaylink_udl
   reset_displaylink_usb
-  make
+  run_as_root make
   run_as_root make install
   run_as_root depmod -a
   run_as_root modprobe evdi || echo "modprobe evdi failed; check kernel version" >&2
