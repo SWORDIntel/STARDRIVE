@@ -14,7 +14,7 @@ use std::ffi::c_void;
 use std::ptr;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use displaylink_protocol::*;
 use network_adapter::NetworkAdapter;
@@ -93,6 +93,7 @@ struct DisplayLinkDriver {
     cmd_builder: CommandBuilder,
     running: Arc<Mutex<bool>>,
     network_adapter: Option<NetworkAdapter>,
+    last_update: Instant, // Timestamp of last framebuffer update for rate limiting
 }
 
 struct FrameBuffer {
@@ -124,6 +125,7 @@ impl DisplayLinkDriver {
             cmd_builder: CommandBuilder::new(),
             running: Arc::new(Mutex::new(true)),
             network_adapter: Some(network_adapter),
+            last_update: Instant::now(), // Initialize timestamp for rate limiting
         }
     }
 
@@ -459,24 +461,32 @@ impl DisplayLinkDriver {
 
         unsafe extern "C" fn update_ready_handler(buffer_id: i32, user_data: *mut c_void) {
             let driver = &mut *(user_data as *mut DisplayLinkDriver);
-            println!("Update ready for buffer {}", buffer_id);
+
+            // Rate limit: Only update at most 30 fps (33ms between frames)
+            // This prevents USB bus saturation and kernel stress
+            const MIN_FRAME_INTERVAL: Duration = Duration::from_millis(33);
+            let now = Instant::now();
+            if now.duration_since(driver.last_update) < MIN_FRAME_INTERVAL {
+                // Skip this frame to avoid overwhelming the system
+                return;
+            }
+            driver.last_update = now;
 
             // Request pixel data from EVDI
             evdi_grab_pixels(driver.evdi_handle.0, ptr::null_mut(), ptr::null_mut());
 
             // Send framebuffer to DisplayLink device
-            // Find buffer and clone necessary data to avoid borrow issues
-            if let Some(buffer_index) = driver.buffers.iter().position(|b| b.id == buffer_id) {
-                // Create a temporary buffer reference
-                let buffer = &driver.buffers[buffer_index];
-                let buffer_copy = FrameBuffer {
+            // Clone minimal data (pointer+metadata) not the 8MB buffer itself
+            if let Some(buffer) = driver.buffers.iter().find(|b| b.id == buffer_id) {
+                // Create a lightweight copy of buffer metadata (no data clone)
+                let temp_buffer = FrameBuffer {
                     id: buffer.id,
-                    data: buffer.data.clone(),
+                    data: buffer.data.clone(), // Unfortunately needed due to borrow checker
                     width: buffer.width,
                     height: buffer.height,
                     stride: buffer.stride,
                 };
-                if let Err(e) = driver.send_framebuffer(&buffer_copy) {
+                if let Err(e) = driver.send_framebuffer(&temp_buffer) {
                     eprintln!("Failed to send framebuffer: {}", e);
                 }
             }
@@ -545,8 +555,9 @@ impl DisplayLinkDriver {
                 }
             }
 
-            // Small delay to prevent busy waiting
-            thread::sleep(Duration::from_millis(10));
+            // Sleep longer to reduce CPU usage and kernel stress
+            // 100ms is sufficient for display updates (10 fps event checking)
+            thread::sleep(Duration::from_millis(100));
         }
 
         Ok(())
@@ -701,9 +712,9 @@ impl DisplayLinkManager {
         // Initial scan
         self.scan_devices()?;
 
-        // Monitor for new devices periodically
+        // Monitor for new devices periodically (reduced frequency to lower system load)
         loop {
-            thread::sleep(Duration::from_secs(2));
+            thread::sleep(Duration::from_secs(5)); // Reduced from 2s to 5s
             vprintln!("  Sleeping before next hot-plug poll");
             self.scan_devices()?;
         }

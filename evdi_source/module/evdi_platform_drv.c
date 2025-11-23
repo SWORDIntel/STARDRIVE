@@ -58,6 +58,8 @@ static int evdi_platform_drv_usb(__always_unused struct notifier_block *nb,
 	if (action != BUS_NOTIFY_DEL_DEVICE)
 		return 0;
 
+	/* FIXED: Hold lock during entire iteration to prevent race conditions */
+	evdi_platform_drv_context_lock((&g_ctx));
 	for (i = 0; i < EVDI_DEVICE_COUNT_MAX; ++i) {
 		pdev = g_ctx.devices[i];
 		if (!pdev)
@@ -66,12 +68,11 @@ static int evdi_platform_drv_usb(__always_unused struct notifier_block *nb,
 		if (pdev->dev.parent == &usb_dev->dev) {
 			EVDI_INFO("Parent USB removed. Removing evdi.%d\n", i);
 			evdi_platform_dev_destroy(pdev);
-			evdi_platform_drv_context_lock((&g_ctx));
 			g_ctx.dev_count--;
 			g_ctx.devices[i] = NULL;
-			evdi_platform_drv_context_unlock((&g_ctx));
 		}
 	}
+	evdi_platform_drv_context_unlock((&g_ctx));
 	return 0;
 }
 #endif
