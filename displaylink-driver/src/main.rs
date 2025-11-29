@@ -556,8 +556,8 @@ impl DisplayLinkDriver {
             }
 
             // Sleep longer to reduce CPU usage and kernel stress
-            // 100ms is sufficient for display updates (10 fps event checking)
-            thread::sleep(Duration::from_millis(100));
+            // 10ms provides ~100Hz event checking, allowing the 30fps limit to work correctly
+            thread::sleep(Duration::from_millis(10));
         }
 
         Ok(())

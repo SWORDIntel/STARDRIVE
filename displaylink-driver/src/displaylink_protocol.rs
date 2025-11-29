@@ -127,57 +127,112 @@ impl RLECompressor {
     pub fn compress(&mut self, framebuffer: &[u8], width: usize, height: usize) -> &[u8] {
         self.buffer.clear();
 
-        // Convert BGRA32 to RGB565 with RLE compression
         let pixels = width * height;
         let mut i = 0;
 
         while i < pixels {
-            let offset = i * 4; // 4 bytes per pixel (BGRA)
-
+            // Get current pixel
+            let offset = i * 4;
             if offset + 3 >= framebuffer.len() {
                 break;
             }
-
-            let pixel = Self::bgra_to_rgb565(
-                framebuffer[offset],     // B
-                framebuffer[offset + 1], // G
-                framebuffer[offset + 2], // R
-                framebuffer[offset + 3], // A
+            let current_pixel = Self::bgra_to_rgb565(
+                framebuffer[offset],
+                framebuffer[offset + 1],
+                framebuffer[offset + 2],
+                framebuffer[offset + 3],
             );
 
-            // Look ahead for repeated pixels
+            // Check for repeat run
             let mut run_length = 1;
-            while i + run_length < pixels && run_length < 255 {
+            while i + run_length < pixels && run_length < 0xAE {
+                // Cap at 0xAE (174) to avoid 0xAF
                 let next_offset = (i + run_length) * 4;
                 if next_offset + 3 >= framebuffer.len() {
                     break;
                 }
-
                 let next_pixel = Self::bgra_to_rgb565(
                     framebuffer[next_offset],
                     framebuffer[next_offset + 1],
                     framebuffer[next_offset + 2],
                     framebuffer[next_offset + 3],
                 );
-
-                if next_pixel != pixel {
+                if next_pixel != current_pixel {
                     break;
                 }
                 run_length += 1;
             }
 
-            // Emit RLE compressed data
             if run_length >= 2 {
-                // Repeated pixel run
+                // Emit Repeated Run
                 self.buffer.push(run_length as u8);
-                self.buffer.extend_from_slice(&pixel.to_le_bytes());
+                self.buffer.extend_from_slice(&current_pixel.to_le_bytes());
                 i += run_length;
             } else {
-                // Single pixel (raw run)
-                self.buffer.push(0xAF); // Raw run marker
-                self.buffer.push(0x00); // Length - 1 (0 = 1 pixel)
-                self.buffer.extend_from_slice(&pixel.to_le_bytes());
-                i += 1;
+                // Start of Raw Run
+                // Look ahead to find how many non-repeating pixels we can group
+                let raw_start_index = i;
+                let mut raw_count = 0;
+
+                while i < pixels {
+                    // Check constraints
+                    if raw_count >= 256 {
+                        break;
+                    } // Max length 256
+                    if raw_count == 32 {
+                        break;
+                    } // Avoid 0xAF 0x20 (Reg Write) collision
+
+                    // Check if a new repeat run starts here (optimization)
+                    // Only switch to repeat if we have at least 2 identical pixels
+                    let curr_offset = i * 4;
+                    if curr_offset + 3 >= framebuffer.len() {
+                        break;
+                    }
+                    let p = Self::bgra_to_rgb565(
+                        framebuffer[curr_offset],
+                        framebuffer[curr_offset + 1],
+                        framebuffer[curr_offset + 2],
+                        framebuffer[curr_offset + 3],
+                    );
+
+                    if i + 1 < pixels {
+                        let next_offset = (i + 1) * 4;
+                        if next_offset + 3 < framebuffer.len() {
+                            let next_p = Self::bgra_to_rgb565(
+                                framebuffer[next_offset],
+                                framebuffer[next_offset + 1],
+                                framebuffer[next_offset + 2],
+                                framebuffer[next_offset + 3],
+                            );
+                            if p == next_p {
+                                // Repeat run detected, stop raw run
+                                break;
+                            }
+                        }
+                    }
+
+                    raw_count += 1;
+                    i += 1;
+                }
+
+                if raw_count > 0 {
+                    // Emit Raw Run
+                    self.buffer.push(0xAF); // Raw run marker
+                    self.buffer.push((raw_count - 1) as u8); // Length - 1
+
+                    for k in 0..raw_count {
+                        let p_idx = raw_start_index + k;
+                        let p_offset = p_idx * 4;
+                        let p_val = Self::bgra_to_rgb565(
+                            framebuffer[p_offset],
+                            framebuffer[p_offset + 1],
+                            framebuffer[p_offset + 2],
+                            framebuffer[p_offset + 3],
+                        );
+                        self.buffer.extend_from_slice(&p_val.to_le_bytes());
+                    }
+                }
             }
         }
 
