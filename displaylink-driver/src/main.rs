@@ -462,9 +462,9 @@ impl DisplayLinkDriver {
         unsafe extern "C" fn update_ready_handler(buffer_id: i32, user_data: *mut c_void) {
             let driver = &mut *(user_data as *mut DisplayLinkDriver);
 
-            // Rate limit: Only update at most 30 fps (33ms between frames)
+            // Rate limit: Only update at most 60 fps (~16ms between frames)
             // This prevents USB bus saturation and kernel stress
-            const MIN_FRAME_INTERVAL: Duration = Duration::from_millis(33);
+            const MIN_FRAME_INTERVAL: Duration = Duration::from_millis(16);
             let now = Instant::now();
             if now.duration_since(driver.last_update) < MIN_FRAME_INTERVAL {
                 // Skip this frame to avoid overwhelming the system

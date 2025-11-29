@@ -136,11 +136,17 @@ impl RLECompressor {
             if offset + 3 >= framebuffer.len() {
                 break;
             }
+            
+            let cur_y = i / width;
+            let cur_x = i % width;
+            
             let current_pixel = Self::bgra_to_rgb565(
                 framebuffer[offset],
                 framebuffer[offset + 1],
                 framebuffer[offset + 2],
                 framebuffer[offset + 3],
+                cur_x,
+                cur_y,
             );
 
             // Check for repeat run
@@ -151,11 +157,18 @@ impl RLECompressor {
                 if next_offset + 3 >= framebuffer.len() {
                     break;
                 }
+                
+                let next_idx = i + run_length;
+                let next_y = next_idx / width;
+                let next_x = next_idx % width;
+                
                 let next_pixel = Self::bgra_to_rgb565(
                     framebuffer[next_offset],
                     framebuffer[next_offset + 1],
                     framebuffer[next_offset + 2],
                     framebuffer[next_offset + 3],
+                    next_x,
+                    next_y,
                 );
                 if next_pixel != current_pixel {
                     break;
@@ -189,21 +202,33 @@ impl RLECompressor {
                     if curr_offset + 3 >= framebuffer.len() {
                         break;
                     }
+                    
+                    let loop_y = i / width;
+                    let loop_x = i % width;
+                    
                     let p = Self::bgra_to_rgb565(
                         framebuffer[curr_offset],
                         framebuffer[curr_offset + 1],
                         framebuffer[curr_offset + 2],
                         framebuffer[curr_offset + 3],
+                        loop_x,
+                        loop_y,
                     );
 
                     if i + 1 < pixels {
                         let next_offset = (i + 1) * 4;
                         if next_offset + 3 < framebuffer.len() {
+                            let next_idx = i + 1;
+                            let next_y = next_idx / width;
+                            let next_x = next_idx % width;
+                            
                             let next_p = Self::bgra_to_rgb565(
                                 framebuffer[next_offset],
                                 framebuffer[next_offset + 1],
                                 framebuffer[next_offset + 2],
                                 framebuffer[next_offset + 3],
+                                next_x,
+                                next_y,
                             );
                             if p == next_p {
                                 // Repeat run detected, stop raw run
@@ -224,11 +249,17 @@ impl RLECompressor {
                     for k in 0..raw_count {
                         let p_idx = raw_start_index + k;
                         let p_offset = p_idx * 4;
+                        
+                        let p_y = p_idx / width;
+                        let p_x = p_idx % width;
+                        
                         let p_val = Self::bgra_to_rgb565(
                             framebuffer[p_offset],
                             framebuffer[p_offset + 1],
                             framebuffer[p_offset + 2],
                             framebuffer[p_offset + 3],
+                            p_x,
+                            p_y,
                         );
                         self.buffer.extend_from_slice(&p_val.to_le_bytes());
                     }
@@ -239,11 +270,36 @@ impl RLECompressor {
         &self.buffer
     }
 
-    /// Convert BGRA (8888) to RGB565 (16-bit)
-    fn bgra_to_rgb565(b: u8, g: u8, r: u8, _a: u8) -> u16 {
-        let r5 = (r >> 3) as u16;
-        let g6 = (g >> 2) as u16;
-        let b5 = (b >> 3) as u16;
+    /// Convert BGRA (8888) to RGB565 (16-bit) with Ordered Dithering
+    fn bgra_to_rgb565(b: u8, g: u8, r: u8, _a: u8, x: usize, y: usize) -> u16 {
+        // 2x2 Bayer Dithering Matrix
+        // [ 1  3 ]
+        // [ 4  2 ]
+        // Scaled for byte arithmetic (0..255 range approx)
+        // We add this threshold to the color value before truncation
+        
+        let threshold_map = [
+            [1, 3],
+            [4, 2]
+        ];
+        
+        let threshold = threshold_map[y % 2][x % 2];
+        
+        // Scale threshold to be meaningful for the lower bits we are dropping
+        // R/B drop 3 bits (values 0-7). Dither magnitude ~4.
+        // G drops 2 bits (values 0-3). Dither magnitude ~2.
+        
+        let dither_val = threshold; 
+
+        // Apply dithering with clamping to prevent overflow
+        let r_dithered = (r as u16 + dither_val as u16).min(255) as u8;
+        let g_dithered = (g as u16 + (dither_val / 2) as u16).min(255) as u8; // Green has more bits, needs less dither
+        let b_dithered = (b as u16 + dither_val as u16).min(255) as u8;
+
+        let r5 = (r_dithered >> 3) as u16;
+        let g6 = (g_dithered >> 2) as u16;
+        let b5 = (b_dithered >> 3) as u16;
+        
         (r5 << 11) | (g6 << 5) | b5
     }
 
@@ -352,15 +408,15 @@ mod tests {
     #[test]
     fn test_bgra_to_rgb565() {
         // Test conversion: Red (255, 0, 0) -> 0xF800
-        let rgb565 = RLECompressor::bgra_to_rgb565(0, 0, 255, 255);
+        let rgb565 = RLECompressor::bgra_to_rgb565(0, 0, 255, 255, 0, 0);
         assert_eq!(rgb565, 0xF800);
 
         // Test conversion: Green (0, 255, 0) -> 0x07E0
-        let rgb565 = RLECompressor::bgra_to_rgb565(0, 255, 0, 255);
+        let rgb565 = RLECompressor::bgra_to_rgb565(0, 255, 0, 255, 0, 0);
         assert_eq!(rgb565, 0x07E0);
 
         // Test conversion: Blue (0, 0, 255) -> 0x001F
-        let rgb565 = RLECompressor::bgra_to_rgb565(255, 0, 0, 255);
+        let rgb565 = RLECompressor::bgra_to_rgb565(255, 0, 0, 255, 0, 0);
         assert_eq!(rgb565, 0x001F);
     }
 
