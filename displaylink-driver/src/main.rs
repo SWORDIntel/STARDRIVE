@@ -652,7 +652,9 @@ impl DisplayLinkManager {
 
             // evdi_connect(handle, DEFAULT_EDID.as_ptr(), DEFAULT_EDID.len() as u32, 0);
 
-            evdi_enable_cursor_events(handle, true);
+            // Disable hardware cursor events so the OS renders the cursor into the framebuffer.
+            // Since we don't implement the cursor handlers, enabling this would make the cursor invisible.
+            evdi_enable_cursor_events(handle, false);
             handle
         };
 
@@ -714,7 +716,7 @@ impl DisplayLinkManager {
 
         // Monitor for new devices periodically (reduced frequency to lower system load)
         loop {
-            thread::sleep(Duration::from_secs(5)); // Reduced from 2s to 5s
+            thread::sleep(Duration::from_secs(1)); // Fast polling (1s) for responsive hot-plug
             vprintln!("  Sleeping before next hot-plug poll");
             self.scan_devices()?;
         }
