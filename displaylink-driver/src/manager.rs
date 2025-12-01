@@ -1,5 +1,5 @@
 use crate::driver::DisplayLinkDriver;
-use crate::evdi::{EVDI_INVALID_HANDLE, evdi_add_device, evdi_enable_cursor_events, evdi_open};
+use crate::evdi::{evdi_add_device, evdi_enable_cursor_events, evdi_open, EVDI_INVALID_HANDLE};
 use rusb::{Device, UsbContext};
 use std::collections::HashSet;
 use std::env;
@@ -25,8 +25,6 @@ macro_rules! vprintln {
         }
     };
 }
-
-
 
 pub struct DisplayLinkManager {
     drivers: Arc<Mutex<HashSet<String>>>,
@@ -57,7 +55,7 @@ impl DisplayLinkManager {
         {
             let drivers = self.drivers.lock().unwrap();
             if drivers.contains(&device_id) {
-                return Ok(())
+                return Ok(());
             }
         }
 
@@ -152,8 +150,7 @@ impl DisplayLinkManager {
         vprintln!("  Starting hot-plug scan loop");
         println!(
             "Monitoring for DisplayLink devices (VID: 0x{:04X}, PID: 0x{:04X})",
-            DISPLAYLINK_VID,
-            DISPLAYLINK_PID
+            DISPLAYLINK_VID, DISPLAYLINK_PID
         );
         println!("Press Ctrl+C to exit\n");
 

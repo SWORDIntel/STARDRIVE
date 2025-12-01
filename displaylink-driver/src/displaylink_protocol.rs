@@ -136,10 +136,10 @@ impl RLECompressor {
             if offset + 3 >= framebuffer.len() {
                 break;
             }
-            
+
             let cur_y = i / width;
             let cur_x = i % width;
-            
+
             let current_pixel = Self::bgra_to_rgb565(
                 framebuffer[offset],
                 framebuffer[offset + 1],
@@ -157,11 +157,11 @@ impl RLECompressor {
                 if next_offset + 3 >= framebuffer.len() {
                     break;
                 }
-                
+
                 let next_idx = i + run_length;
                 let next_y = next_idx / width;
                 let next_x = next_idx % width;
-                
+
                 let next_pixel = Self::bgra_to_rgb565(
                     framebuffer[next_offset],
                     framebuffer[next_offset + 1],
@@ -202,10 +202,10 @@ impl RLECompressor {
                     if curr_offset + 3 >= framebuffer.len() {
                         break;
                     }
-                    
+
                     let loop_y = i / width;
                     let loop_x = i % width;
-                    
+
                     let p = Self::bgra_to_rgb565(
                         framebuffer[curr_offset],
                         framebuffer[curr_offset + 1],
@@ -221,7 +221,7 @@ impl RLECompressor {
                             let next_idx = i + 1;
                             let next_y = next_idx / width;
                             let next_x = next_idx % width;
-                            
+
                             let next_p = Self::bgra_to_rgb565(
                                 framebuffer[next_offset],
                                 framebuffer[next_offset + 1],
@@ -249,10 +249,10 @@ impl RLECompressor {
                     for k in 0..raw_count {
                         let p_idx = raw_start_index + k;
                         let p_offset = p_idx * 4;
-                        
+
                         let p_y = p_idx / width;
                         let p_x = p_idx % width;
-                        
+
                         let p_val = Self::bgra_to_rgb565(
                             framebuffer[p_offset],
                             framebuffer[p_offset + 1],
@@ -277,19 +277,16 @@ impl RLECompressor {
         // [ 4  2 ]
         // Scaled for byte arithmetic (0..255 range approx)
         // We add this threshold to the color value before truncation
-        
-        let threshold_map = [
-            [1, 3],
-            [4, 2]
-        ];
-        
+
+        let threshold_map = [[1, 3], [4, 2]];
+
         let threshold = threshold_map[y % 2][x % 2];
-        
+
         // Scale threshold to be meaningful for the lower bits we are dropping
         // R/B drop 3 bits (values 0-7). Dither magnitude ~4.
         // G drops 2 bits (values 0-3). Dither magnitude ~2.
-        
-        let dither_val = threshold; 
+
+        let dither_val = threshold;
 
         // Apply dithering with clamping to prevent overflow
         let r_dithered = (r as u16 + dither_val as u16).min(255) as u8;
@@ -299,7 +296,7 @@ impl RLECompressor {
         let r5 = (r_dithered >> 3) as u16;
         let g6 = (g_dithered >> 2) as u16;
         let b5 = (b_dithered >> 3) as u16;
-        
+
         (r5 << 11) | (g6 << 5) | b5
     }
 
