@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 // USB constants
 const DISPLAY_INTERFACE: u8 = 0;
-const BULK_OUT_ENDPOINT: u8 = 0x02;
+const BULK_OUT_ENDPOINT: u8 = 0x01; // Fixed: PROTOCOL.md specifies endpoint 0x01
 const BULK_TIMEOUT: Duration = Duration::from_secs(2);
 const DL_MAX_TRANSFER_SIZE: usize = 16384;
 
@@ -130,6 +130,35 @@ impl DisplayLinkDriver {
         Ok(())
     }
 
+    // Send channel initialization control transfer
+    fn send_channel_init(&self) -> Result<(), String> {
+        use crate::displaylink_protocol::{DL_USB_REQUEST_CHANNEL, DL_CHAN_CMD_INIT, USB_DIR_OUT, USB_TYPE_VENDOR, USB_RECIP_DEVICE};
+        
+        let handle = self.usb_handle.lock().unwrap();
+        
+        // Channel initialization: Request 0x12, Value 0x0000 (DL_CHAN_CMD_INIT)
+        // Request type: 0x40 = USB_DIR_OUT | USB_TYPE_VENDOR | USB_RECIP_DEVICE
+        let request_type = USB_DIR_OUT | USB_TYPE_VENDOR | USB_RECIP_DEVICE;
+        let request = DL_USB_REQUEST_CHANNEL;
+        let value = DL_CHAN_CMD_INIT;
+        let index = 0x0000;
+        
+        vprintln!("  Sending channel initialization control transfer (req=0x{:02X}, val=0x{:04X})...", request, value);
+        handle
+            .write_control(
+                request_type,
+                request,
+                value,
+                index,
+                &[],
+                Duration::from_millis(1000),
+            )
+            .map_err(|e| format!("Channel initialization failed: {}", e))?;
+        
+        println!("  ✓ Channel initialized");
+        Ok(())
+    }
+
     // Send initialization commands to DisplayLink device
     fn send_init_sequence(&mut self) -> Result<(), String> {
         println!("Initializing DisplayLink device...");
@@ -137,6 +166,12 @@ impl DisplayLinkDriver {
         // Device needs significant time to be ready after claiming interface
         vprintln!("  Waiting for device firmware to stabilize (1000ms)...");
         std::thread::sleep(std::time::Duration::from_millis(1000));
+
+        // Send channel initialization (required by protocol)
+        self.send_channel_init()?;
+        
+        // Additional delay after channel init
+        std::thread::sleep(std::time::Duration::from_millis(200));
 
         vprintln!("  DL-3000 series: testing bulk endpoint");
 
@@ -281,6 +316,9 @@ impl DisplayLinkDriver {
 
         unsafe {
             evdi_register_buffer(self.evdi_handle.0, evdi_buf);
+            
+            // Request first update to get initial framebuffer content
+            evdi_request_update(self.evdi_handle.0, buffer_id);
         }
 
         self.buffers.push(framebuffer);
@@ -411,6 +449,15 @@ impl DisplayLinkDriver {
                 vtotal,
             };
 
+            // Connect EVDI virtual display (required before mode set)
+            println!("[{}] Connecting EVDI virtual display...", driver.device_id);
+            evdi_connect(
+                driver.evdi_handle.0,
+                DEFAULT_EDID.as_ptr(),
+                DEFAULT_EDID.len() as u32,
+                0,
+            );
+
             // Send mode to DisplayLink device
             if let Err(e) = driver.send_mode_set(&dl_mode) {
                 eprintln!(
@@ -424,6 +471,8 @@ impl DisplayLinkDriver {
             if let Err(e) = driver.register_buffer(mode.width, mode.height) {
                 eprintln!("[{}] Failed to register buffer: {}", driver.device_id, e);
             }
+            
+            println!("[{}] ✓ Display mode configured and ready", driver.device_id);
         }
 
         unsafe extern "C" fn update_ready_handler(buffer_id: i32, user_data: *mut c_void) {
@@ -439,23 +488,32 @@ impl DisplayLinkDriver {
             }
             driver.last_update = now;
 
-            // Request pixel data from EVDI
-            evdi_grab_pixels(driver.evdi_handle.0, ptr::null_mut(), ptr::null_mut());
+            // Find the buffer to update
+            if let Some(buffer) = driver.buffers.iter_mut().find(|b| b.id == buffer_id) {
+                // Request pixel data from EVDI - this fills the registered buffer
+                // The buffer pointer was registered with EVDI, so it will be updated directly
+                evdi_grab_pixels(driver.evdi_handle.0, ptr::null_mut(), ptr::null_mut());
+                
+                vprintln!("[{}] Update ready for buffer {} ({}x{})", 
+                    driver.device_id, buffer_id, buffer.width, buffer.height);
 
-            // Send framebuffer to DisplayLink device
-            // Clone minimal data (pointer+metadata) not the 8MB buffer itself
-            if let Some(buffer) = driver.buffers.iter().find(|b| b.id == buffer_id) {
-                // Create a lightweight copy of buffer metadata (no data clone)
+                // Send framebuffer to DisplayLink device
+                // Note: buffer.data should now contain the pixel data from EVDI
                 let temp_buffer = FrameBuffer {
                     id: buffer.id,
-                    data: buffer.data.clone(), // Unfortunately needed due to borrow checker
+                    data: buffer.data.clone(), // Clone needed due to borrow checker
                     width: buffer.width,
                     height: buffer.height,
                     stride: buffer.stride,
                 };
                 if let Err(e) = driver.send_framebuffer(&temp_buffer) {
-                    eprintln!("Failed to send framebuffer: {}", e);
+                    eprintln!("[{}] Failed to send framebuffer: {}", driver.device_id, e);
+                } else {
+                    // Request next update to continue the update loop
+                    evdi_request_update(driver.evdi_handle.0, buffer_id);
                 }
+            } else {
+                vprintln!("[{}] Update ready for unknown buffer {}", driver.device_id, buffer_id);
             }
         }
 
