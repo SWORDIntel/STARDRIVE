@@ -316,6 +316,9 @@ impl DisplayLinkDriver {
 
         unsafe {
             evdi_register_buffer(self.evdi_handle.0, evdi_buf);
+            
+            // Request first update to get initial framebuffer content
+            evdi_request_update(self.evdi_handle.0, buffer_id);
         }
 
         self.buffers.push(framebuffer);
@@ -505,6 +508,9 @@ impl DisplayLinkDriver {
                 };
                 if let Err(e) = driver.send_framebuffer(&temp_buffer) {
                     eprintln!("[{}] Failed to send framebuffer: {}", driver.device_id, e);
+                } else {
+                    // Request next update to continue the update loop
+                    evdi_request_update(driver.evdi_handle.0, buffer_id);
                 }
             } else {
                 vprintln!("[{}] Update ready for unknown buffer {}", driver.device_id, buffer_id);
