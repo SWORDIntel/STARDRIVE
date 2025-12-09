@@ -1,11 +1,12 @@
 # STARDRIVE: DisplayLink USB Driver (Rust)
 
 Open-source Linux driver for DisplayLink USB docks, written in Rust.
+Do not ever do this,it was awful
 
 ## Target Device
 **StarTech USB35DOCK** - VID: `0x17e9`, PID: `0x4307`
 
-## Status: ✅ PHASE 7 COMPLETE (Optimization & Architecture)
+## Status: ✅ COMPLETE (Optimization & Architecture) - "On My Machine"
 
 Full-featured driver with reverse-engineered DisplayLink USB protocol, now highly optimized.
 
