@@ -2,7 +2,7 @@
 
 Open-source Linux driver for DisplayLink USB docks, written in Rust.
 
-Do not ever do this,it was awful
+Do not ever do this,it was awful i was like lets harden all the thigns and didnt stop to think WHY GOD DID I DO THIS ITS PROPRIETRY...anyway it works for...every purpose so far,open issues,im sure theres many.
 
 ## Target Device
 **StarTech USB35DOCK** - VID: `0x17e9`, PID: `0x4307`
