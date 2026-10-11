@@ -129,7 +129,7 @@ Areas for contribution:
 
 ## License
 
-MIT License
+This project is licensed under the **SWORD Restricted Source Licence v1.0 (SRSL-1.0)**. Personal and non-commercial use is permitted under its terms; commercial exploitation requires a separate written agreement. See [LICENSE](LICENSE).
 
 ## Disclaimer
 
