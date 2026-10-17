@@ -1,6 +1,6 @@
 # STARDRIVE: DisplayLink USB Driver (Rust)
 
-Open-source Linux driver for DisplayLink USB docks, written in Rust.
+Source-available Linux driver for DisplayLink USB docks, written in Rust. Original SWORD-owned components are offered under SRSL-1.1; included EVDI code and vendor/reference software retain their separate licences.
 
 Do not ever do this,it was awful i was like lets harden all the thigns and didnt stop to think WHY GOD DID I DO THIS ITS PROPRIETRY...anyway it works for...every purpose so far,open issues,im sure theres many.
 
@@ -129,7 +129,7 @@ Areas for contribution:
 
 ## License
 
-This project is licensed under the **SWORD Restricted Source Licence v1.0 (SRSL-1.0)**. Personal and non-commercial use is permitted under its terms; commercial exploitation requires a separate written agreement. See [LICENSE](LICENSE).
+This project is licensed under the **SWORD Restricted Source Licence v1.1 (SRSL-1.1)**. Personal and non-commercial use is permitted under its terms; commercial exploitation requires a separate written agreement. See [LICENSE](LICENSE) and [migration notes](SRSL_MIGRATION.md). Earlier SRSL-1.0 grants remain effective for previously distributed copies; separately licensed EVDI and proprietary vendor materials are excluded.
 
 ## Disclaimer
 
